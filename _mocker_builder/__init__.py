@@ -13,16 +13,17 @@ Tv = TypeVar('Tv')
 Tr = TypeVar('Tr')
 Tse = TypeVar('Tse', Callable, List)
 
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 
 
 class MockerBuilderError(Exception):
     """ Error in MockerBuilder usage or invocation"""
 
 
+# TODO remover esta função e limpar libs não utilizadas
 def dict_print(message, data: OrderedDict):
     print(message)
-    pprint(data)
+    pprint(data, indent=4)
     # print(json.loads(json.dumps(data, sort_keys=True, indent=4)))
     # print(yaml.dump(data, default_flow_style=False))
 
@@ -124,6 +125,7 @@ class MockerBuilderImpl:
                 # TODO: Implementar return_value e/ou side_effect condicional Ex if result:...
                 # TODO testar usar side_effect com future...
         except Exception as e:
+            # TODO remover os prints e adicionar logs e ativar raise
             # raise MockerBuilderError(f"Eita! {e}")
             print(f"Eita! {e}")
 
@@ -154,6 +156,7 @@ class MockerBuilderImpl:
                 self._mocked_method[mock_name].configure_mock(**kwargs.get('kwargs', {}))
             setattr(self._test_main_class, mock_name, self._mocked_method[mock_name])
         except Exception as ex:
+            # TODO remover os prints e adicionar logs e ativar raise
             print(f"Oopsssss! {ex}")
             # raise MockerBuilderError(ex)
 
@@ -177,9 +180,9 @@ class MockerBuilderImpl:
                 mock_name=mock_name,
                 **mock_params
             )
+
     # TODO: Verificar quais destes métodos vão precisar pois agora temos acesso aos
     # dados do mocker: _Mocker
-
     def _set_mock_method_return_value(self, mock_method: str, return_value: Tr):
         self._mock_metadata.get(mock_method)['return_value'] = return_value
 
@@ -257,6 +260,7 @@ class IMockerBuilder(ABC):
     def mocker_builder_start(self):
         self.__mocker_builder._start()
 
+    # TODO: refactor all thise methods
     def set_mock_method_return_value(self, mock_method: str, return_value: Tr):
         self.__mocker_builder._set_mock_method_return_value(mock_method, return_value)
 
