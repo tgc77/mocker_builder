@@ -163,7 +163,7 @@ class MockerBuilderImpl:
             setattr(self._test_main_class, mock_name, self._mocked_method[mock_name])
         except Exception as ex:
             # TODO remover os prints e adicionar logs e ativar raise
-            print(f"Oopsssss! {ex}")
+            print(f"#__patch: Oops! {ex}")
             # raise MockerBuilderError(ex)
 
     def _add_mock(self, mock_metadata: MockMetadata):

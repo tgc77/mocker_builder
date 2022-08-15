@@ -6,76 +6,85 @@ from mocker_builder import MockerBuilder
 
 
 @dataclass
-class FakeUser:
-    id = 2
-    cpf = '12345678911'
-    email = 'teste@teste.com'
+class FakeHero:
+    bananas: int = 2
+    pyjamas: int = 2
+    nickname: str = 'Bad Fat Hero'
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'cpf': self.cpf,
-            'email': self.email
+            'bananas': self.bananas,
+            'pyjamas': self.pyjamas,
+            'nickname': self.nickname
         }
 
 
 @dataclass
-class MyFixture:
-    cpf: str = None
-    email: str = None
+class MyHero:
+    bananas: int = 3
+    pyjamas: int = 2
+    nickname: str = "Harry Potter"
 
 
 @dataclass
 class Batman:
-    a: int = 1
-    b: int = 2
+    bananas: int = 1
+    pyjamas: int = 2
+    nickname: str = "Big Fat Bat"
 
-    def racking_you(self):
-        print(f"{self.__class__.__name__} Can I rack you?")
+    def eating_banana(self):
+        print(f"{self.__class__.__name__} are eating {self.bananas} banana(s)!")
 
-    def another_func(self):
-        print(f"{self.__class__.__name__} Hi there! I'am another func!")
+    def wearing_pyjama(self):
+        print(f"{self.__class__.__name__} are wearing {self.pyjamas} pyjama(s)!")
 
-    def show_my_klass(self):
-        print(self.__dict__)
+    def just_call_for(self):
+        print(f"My hero just call for {self.nickname}")
+
+    def just_says(self):
+        print(f"{self.__class__.__name__} just says: HUEHUEHUEH")
 
 
 @dataclass
-class SpyderMan:
-    a: int = 3
-    b: int = 4
+class Robin:
+    bananas: int = 3
+    pyjamas: int = 4
+    nickname: str = "Little Bastard"
 
-    def racking_you(self):
-        print(f"{self.__class__.__name__} Can I rack you?")
+    def eating_banana(self):
+        print(f"{self.__class__.__name__} are eating {self.bananas} banana(s)!")
 
-    def another_func(self):
-        print(f"{self.__class__.__name__} Hi there! I'am another func!")
+    def wearing_pyjama(self):
+        print(f"{self.__class__.__name__} are wearing {self.pyjamas} pyjama(s)!")
 
-    def show_my_klass(self):
-        print(self.__dict__)
+    def just_call_for(self):
+        print(f"My hero just call for {self.nickname}")
+
+    def just_says(self):
+        print(f"{self.__class__.__name__} just says: kkkkkkkkkk")
 
 
-class TestingCode:
-    _my_klass: Union[Batman, SpyderMan] = None
+class TestingHeroes:
+    _my_hero: Union[Batman, Robin] = None
 
-    def racking_you(self):
-        self._my_klass.racking_you()
+    def eating_banana(self):
+        self._my_hero.eating_banana()
 
-    def another_func(self):
-        self._my_klass.another_func()
+    def wearing_pyjama(self):
+        self._my_hero.wearing_pyjama()
 
-    def show_my_klass(self):
-        self._my_klass.show_my_klass()
+    def just_call_for(self):
+        self._my_hero.just_call_for()
 
-    def func_call_test(self):
+    def my_hero_just_says(self):
         try:
-            self.func_test()
+            self.just_says()
         except Exception as e:
-            print(f"Opps2! {e}")
+            print(f"OpsII! {e}")
             try:
-                self._my_klass.func_test()
+                self._my_hero.just_says()
             except Exception as e:
-                print(f"Opps3! {e}")
+                print(f"OpsIII! {e}")
 
 
 class TestMockerBuilder(MockerBuilder):
@@ -85,31 +94,30 @@ class TestMockerBuilder(MockerBuilder):
         print("######################### initializer #######################")
         # ========= setting fixtures
         self.fixture_register(
-            name="my_fixture",
-            return_value=MyFixture(
-                cpf='12345678901',
-                email='teste@teste.bla'
+            name="my_hero",
+            return_value=MyHero(
+                bananas=12,
+                pyjamas=7,
+                nickname="Bellboy"
             )
         )
 
         async def _side_effect(*args, **kwargs):
-            # print("Testing side_effect returning DEFAULT")
-            # return DEFAULT
             class Fake:
                 async def get(self, **kwargs):
-                    return FakeUser()
+                    return FakeHero()
             return Fake()
 
         # ========= settimg mocks
         self.add_mock(
-            mock_name='mock_testing_code',
-            klass=TestingCode,
-            attribute='_my_klass',
-            # new=Batman(),
+            mock_name='mock_testing_heroes',
+            klass=TestingHeroes,
+            attribute='_my_hero',
+            new=Batman(),
             # new_callable=MagicMock(Batman),
             # spec=Batman(),
-            func_test=lambda: print('ouieeeeh!'),
-            return_value=Batman(),
+            just_says=lambda: print('ouieeeeh!'),
+            # return_value=Batman(),
             # autospec=True,
             # side_effect=_side_effect
         )
@@ -118,17 +126,18 @@ class TestMockerBuilder(MockerBuilder):
     async def test_execute_success(self):
         self.mocker_builder_start()
 
-        testing_code = TestingCode()
+        testing_code = TestingHeroes()
         try:
-            self.mock_testing_code.func_test()
+            self.mock_testing_heroes.just_says()
         except Exception as e:
             print(f"Eita! {e}")
 
-        testing_code.func_call_test()
+        testing_code.my_hero_just_says()
 
-        testing_code.racking_you()
-        testing_code.another_func()
-        testing_code.show_my_klass()
+        testing_code.eating_banana()
+        testing_code.wearing_pyjama()
+        testing_code.just_call_for()
 
-        assert self.my_fixture.cpf == "12345678901"
-        assert self.my_fixture.email == 'teste@teste.bla'
+        assert self.my_hero.bananas == 12
+        assert self.my_hero.pyjamas == 7
+        assert self.my_hero.nickname == "Bellboy"
