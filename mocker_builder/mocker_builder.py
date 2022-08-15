@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 import asyncio
-from collections import OrderedDict
+from dataclasses import dataclass, field
 from pprint import pprint
 from typing import Any, Callable, Dict, List, TypeVar, Union
 import inspect
-from unittest.mock import DEFAULT
+from unittest.mock import DEFAULT, MagicMock
 import pytest
-from pytest_mock import MockFixture
+from pytest_mock import MockerFixture
+from pytest_mock.plugin import AsyncMockType
 
 Tk = TypeVar('Tk', bound=Callable)
 Tv = TypeVar('Tv')
@@ -16,25 +17,38 @@ Tse = TypeVar('Tse', Callable, List)
 __version__ = "0.1.0"
 
 
-class MockerBuilderError(Exception):
-    """ Error in MockerBuilder usage or invocation"""
-
-
 # TODO remover esta função e limpar libs não utilizadas
-def dict_print(message, data: OrderedDict):
+def dict_print(message, data):
     print(message)
     pprint(data, indent=4)
     # print(json.loads(json.dumps(data, sort_keys=True, indent=4)))
     # print(yaml.dump(data, default_flow_style=False))
 
 
-class _Mocker(MockFixture):
-    def patcher(self, *args):
-        pass
+class MockerBuilderError(Exception):
+    """ Error in MockerBuilder usage or invocation"""
+
+
+@dataclass
+class MockMetadata:
+    mock_name: str
+    klass: Tk = None
+    method: str = None
+    attribute: str = None
+    new: Tv = DEFAULT
+    spec: bool = None
+    create: bool = False
+    spec_set: bool = None
+    autospec: Union[bool, Callable] = None
+    new_callable: Callable = None
+    return_value: Tr = None
+    side_effect: Tse = None
+    active: bool = True
+    kwargs: Dict[str, Any] = field(default_factory={})
 
 
 class MockerBuilderImpl:
-    __mock_validate_keys = [
+    __mock_keys_validate = [
         'new',
         'spec',
         'create',
@@ -45,11 +59,10 @@ class MockerBuilderImpl:
         'side_effect'
     ]
 
-    def __init__(self, mocker: _Mocker) -> None:
+    def __init__(self, mocker: MockerFixture) -> None:
         self._mocker = mocker
-        self._mocked_method = {}
-        # Dict[str, Union[MagicMock, AsyncMock]]
-        self._mock_metadata = {}
+        self._mocked_method: Dict[str, Union[MagicMock, AsyncMockType]] = {}
+        self._mock_metadata: Dict[str, MockMetadata] = {}
         self._test_main_class = None
 
     def _register_test_main_class(self, t_main_class: Tk):
@@ -57,6 +70,33 @@ class MockerBuilderImpl:
 
     def _start(self):
         self.__load_metadata()
+
+    def _mock_kwargs_builder(self, mock_metadata: MockMetadata) -> Dict[str, Any]:
+        kwargs = {}
+        for attr in self.__mock_keys_validate:
+            valeu = getattr(mock_metadata, attr)
+            if valeu:
+                kwargs.update({attr: valeu})
+        return kwargs
+
+    def patcher(self, mock_metadata: MockMetadata) -> Union[MagicMock, AsyncMockType]:
+        method = mock_metadata.method
+        attribute = mock_metadata.attribute
+        klass = mock_metadata.klass
+        _args = [method if method else attribute]
+        _kwargs = self._mock_kwargs_builder(mock_metadata)
+
+        # TODO: testar se é possível utilizar um modulo em vez de uma classe para
+        if klass:
+            return self._mocker.patch.object(
+                klass,  # poderia ser um modulo aqui?
+                *_args,
+                **_kwargs
+            )
+        # if klass else self._mocker(
+        #     *args,
+        #     **kwargs
+        # )
 
     def __load_safe_mock_param_path_from_module(self, safe_method: str):
         from importlib import import_module
@@ -74,22 +114,14 @@ class MockerBuilderImpl:
 
     def __patch(
         self,
-        mock_name: str,
-        **kwargs: OrderedDict
+        mock_metadata: MockMetadata
     ):
-        klass = kwargs.pop('klass')
-        method = kwargs.pop('method')
-        attribute = kwargs.pop('attribute')
-        kwargs.pop('active')
-
-        # dict_print("#########__patch -> kwargs: ", kwargs)
-
-        for key in self.__mock_validate_keys:
-            if not kwargs.get(key):
-                kwargs.pop(key)
-
-        return_value = kwargs.get('return_value')
-        side_effect = kwargs.get('side_effect')
+        mock_name = mock_metadata.mock_name
+        klass = mock_metadata.klass
+        method = mock_metadata.method
+        attribute = mock_metadata.attribute
+        return_value = mock_metadata.return_value
+        side_effect = mock_metadata.side_effect
 
         if return_value and side_effect:
             import warnings
@@ -121,64 +153,31 @@ class MockerBuilderImpl:
             if inspect.iscoroutinefunction(check_mock_param):
                 future = asyncio.Future()
                 future.set_result(return_value)
-                kwargs['return_value'] = future
+                mock_metadata.return_value = future
                 # TODO: Implementar return_value e/ou side_effect condicional Ex if result:...
                 # TODO testar usar side_effect com future...
-        except Exception as e:
-            # TODO remover os prints e adicionar logs e ativar raise
-            # raise MockerBuilderError(f"Eita! {e}")
-            print(f"Eita! {e}")
 
-        # TODO: substituir esta func chamando _Mocker.patcher(*args, **kwargs)
-        def mocker_patch(klass: Tk):
-            # TODO if return_valeu keyword exists we can pass kwargs ???
-
-            # TODO: testar substituir a keyword new= por um args e pesquisar a utilização
-            # e comportamento do new.
-            func_params = [
-                method if method else attribute, kwargs
-            ]
-            # print(f"######### mocker_patch -> func_params:\n {func_params}")
-
-            # TODO: testar se é possível utilizar um modulo em vez de uma classe para
-            return self._mocker.patch.object(
-                klass,  # poderia ser um modulo aqui?
-                func_params[0],
-                **func_params[1]
-            )
-            # if klass else self._mocker(
-            #     *func_params[0],
-            #     **func_params[1]
-            # )
-        try:
-            self._mocked_method[mock_name] = mocker_patch(klass)
-            if kwargs.get('new') == DEFAULT:
-                self._mocked_method[mock_name].configure_mock(**kwargs.get('kwargs', {}))
+            self._mocked_method[mock_name] = self.patcher(mock_metadata)
+            if mock_metadata.new == DEFAULT and mock_metadata.kwargs:
+                self._mocked_method[mock_name].configure_mock(**mock_metadata.kwargs)
             setattr(self._test_main_class, mock_name, self._mocked_method[mock_name])
         except Exception as ex:
             # TODO remover os prints e adicionar logs e ativar raise
             print(f"Oopsssss! {ex}")
             # raise MockerBuilderError(ex)
 
-    def _add_mock(
-        self,
-        mock_name: str,
-        **kwargs: OrderedDict
-    ):
+    def _add_mock(self, mock_metadata: MockMetadata):
         self._mock_metadata.update({
-            mock_name: {
-                **kwargs
-            }
+            mock_metadata.mock_name: mock_metadata
         })
 
     def __load_metadata(self):
-        for mock_name, mock_params in self._mock_metadata.items():
-            if not bool(mock_params.get('active')):
+        for _, mock_metadata in self._mock_metadata.items():
+            if not mock_metadata.active:
                 continue
 
             self.__patch(
-                mock_name=mock_name,
-                **mock_params
+                mock_metadata
             )
 
     # TODO: Verificar quais destes métodos vão precisar pois agora temos acesso aos
@@ -207,7 +206,7 @@ class IMockerBuilder(ABC):
             IMockerBuilder.__mocker_builder = MockerBuilderImpl(mocker)
             IMockerBuilder.__mocker_builder._register_test_main_class(test_main_class)
             yield fnc(test_main_class)
-            # print("\n############### need to run gc.collect() or clean memory ? ################")
+            # print("\n############# need to run gc.collect() or clean memory ? ##############")
         return builder
 
     @abstractmethod
@@ -237,24 +236,24 @@ class IMockerBuilder(ABC):
         active: bool = True,
         **kwargs
     ):
-        mock_params = OrderedDict([
-            ('klass', klass),
-            ('method', method),
-            ('attribute', attribute),
-            ('new', new),
-            ('spec', spec),
-            ('create', create),
-            ('spec_set', spec_set),
-            ('autospec', autospec),
-            ('new_callable', new_callable),
-            ('return_value', return_value),
-            ('side_effect', side_effect),
-            ('active', active)
-        ])
-        mock_params.update([('kwargs', kwargs)]) if kwargs else None
-        self.__mocker_builder._add_mock(
+        mock_metadata = MockMetadata(
             mock_name=mock_name,
-            **mock_params
+            klass=klass,
+            method=method,
+            attribute=attribute,
+            new=new,
+            spec=spec,
+            create=create,
+            spec_set=spec_set,
+            autospec=autospec,
+            new_callable=new_callable,
+            return_value=return_value,
+            side_effect=side_effect,
+            active=active,
+            kwargs=kwargs if kwargs else None
+        )
+        self.__mocker_builder._add_mock(
+            mock_metadata=mock_metadata
         )
 
     def mocker_builder_start(self):

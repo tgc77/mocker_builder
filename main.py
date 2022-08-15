@@ -82,7 +82,7 @@ class TestMockerBuilder(MockerBuilder):
 
     @MockerBuilder.initializer
     def mocker_builder_initializer(self):
-        print("######################### initializer #################################")
+        print("######################### initializer #######################")
         # ========= setting fixtures
         self.fixture_register(
             name="my_fixture",
