@@ -1,90 +1,10 @@
 from dataclasses import dataclass
 from typing import Union
+from unittest.mock import MagicMock
 import pytest
 
 from mocker_builder import MockerBuilder
-
-
-@dataclass
-class FakeHero:
-    bananas: int = 2
-    pyjamas: int = 2
-    nickname: str = 'Bad Fat Hero'
-
-    def to_dict(self):
-        return {
-            'bananas': self.bananas,
-            'pyjamas': self.pyjamas,
-            'nickname': self.nickname
-        }
-
-
-@dataclass
-class MyHero:
-    bananas: int = 3
-    pyjamas: int = 2
-    nickname: str = "Harry Potter"
-
-
-@dataclass
-class Batman:
-    bananas: int = 1
-    pyjamas: int = 2
-    nickname: str = "Big Fat Bat"
-
-    def eating_banana(self):
-        print(f"{self.__class__.__name__} are eating {self.bananas} banana(s)!")
-
-    def wearing_pyjama(self):
-        print(f"{self.__class__.__name__} are wearing {self.pyjamas} pyjama(s)!")
-
-    def just_call_for(self):
-        print(f"My hero just call for {self.nickname}")
-
-    def just_says(self):
-        print(f"{self.__class__.__name__} just says: HUEHUEHUEH")
-
-
-@dataclass
-class Robin:
-    bananas: int = 3
-    pyjamas: int = 4
-    nickname: str = "Little Bastard"
-
-    def eating_banana(self):
-        print(f"{self.__class__.__name__} are eating {self.bananas} banana(s)!")
-
-    def wearing_pyjama(self):
-        print(f"{self.__class__.__name__} are wearing {self.pyjamas} pyjama(s)!")
-
-    def just_call_for(self):
-        print(f"My hero just call for {self.nickname}")
-
-    def just_says(self):
-        print(f"{self.__class__.__name__} just says: kkkkkkkkkk")
-
-
-class TestingHeroes:
-    _my_hero: Union[Batman, Robin] = None
-
-    def eating_banana(self):
-        self._my_hero.eating_banana()
-
-    def wearing_pyjama(self):
-        self._my_hero.wearing_pyjama()
-
-    def just_call_for(self):
-        self._my_hero.just_call_for()
-
-    def my_hero_just_says(self):
-        try:
-            self.just_says()
-        except Exception as e:
-            print(f"OpsII! {e}")
-            try:
-                self._my_hero.just_says()
-            except Exception as e:
-                print(f"OpsIII! {e}")
+from testing_heroes.my_heroes import Batman, FakeHero, MyHero, TestingHeroes
 
 
 class TestMockerBuilder(MockerBuilder):
@@ -123,7 +43,7 @@ class TestMockerBuilder(MockerBuilder):
         )
 
     @pytest.mark.asyncio
-    async def test_execute_success(self):
+    async def test_my_heroes(self):
         self.mocker_builder_start()
 
         testing_code = TestingHeroes()
