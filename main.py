@@ -4,7 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from mocker_builder import MockerBuilder
-from testing_heroes.my_heroes import Batman, FakeHero, MyHero, TestingHeroes
+from testing_heroes import my_heroes
+from testing_heroes.my_heroes import Batman, FakeHero, PeakyBlinder, Robin, TestingHeroes
 
 
 class TestMockerBuilder(MockerBuilder):
@@ -15,7 +16,7 @@ class TestMockerBuilder(MockerBuilder):
         # ========= setting fixtures
         self.fixture_register(
             name="my_hero",
-            return_value=MyHero(
+            return_value=PeakyBlinder(
                 bananas=12,
                 pyjamas=7,
                 nickname="Bellboy"
@@ -24,40 +25,60 @@ class TestMockerBuilder(MockerBuilder):
 
         async def _side_effect(*args, **kwargs):
             class Fake:
-                async def get(self, **kwargs):
+                async def who_is_my_hero(self):
                     return FakeHero()
             return Fake()
 
         # ========= settimg mocks
         self.add_mock(
-            mock_name='mock_testing_heroes',
-            klass=TestingHeroes,
-            attribute='_my_hero',
-            new=Batman(),
+            mock_name='mock_my_hero',
+            target=TestingHeroes,
+            # TODO try mock a _my_hero.just_says
+            # attribute='_my_hero',
+            method='just_says',
+            # new=Batman(),
             # new_callable=MagicMock(Batman),
             # spec=Batman(),
-            just_says=lambda: print('ouieeeeh!'),
-            # return_value=Batman(),
+            says=lambda: print('ouieeeeh!'),
+            return_value="Ops! I have been mocked!",
             # autospec=True,
             # side_effect=_side_effect
         )
 
+        self.add_mock(
+            mock_name='mock_the_best_hero',
+            target=my_heroes,
+            attribute='THE_BEST_HERO',
+            new=Batman(),
+        )
+
+        # self.add_mock(
+        #     mock_name='mock_who_is_the_best_hero',
+        #     target=my_heroes,
+        #     method='who_is_the_best_hero',
+        #     return_value="I'm my best hero!",
+        # )
+
     @pytest.mark.asyncio
     async def test_my_heroes(self):
+        print("The best hero before mocker start:")
+        my_heroes.who_is_the_best_hero()
+
         self.mocker_builder_start()
 
-        testing_code = TestingHeroes()
-        try:
-            self.mock_testing_heroes.just_says()
-        except Exception as e:
-            print(f"Eita! {e}")
+        print("The best hero after mocker start:")
+        my_heroes.who_is_the_best_hero()
 
-        testing_code.my_hero_just_says()
+        testing_code = TestingHeroes()(self.my_hero)
 
-        testing_code.eating_banana()
-        testing_code.wearing_pyjama()
-        testing_code.just_call_for()
+        assert testing_code.just_says() == "Ops! I have been mocked!"
+        assert self.mock_my_hero.called
 
-        assert self.my_hero.bananas == 12
-        assert self.my_hero.pyjamas == 7
-        assert self.my_hero.nickname == "Bellboy"
+        # TODO check if need to inject params to the mock
+        # perhaps should create keyword configure_mock to accept
+        # a dict config {'_my_hero.just_says'}
+        self.mock_my_hero.says()
+
+        assert testing_code._my_hero.bananas == 12
+        assert testing_code._my_hero.pyjamas == 7
+        assert testing_code._my_hero.nickname == "Bellboy"

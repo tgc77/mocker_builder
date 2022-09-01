@@ -1,3 +1,4 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -51,7 +52,7 @@ class PeakyBlinder(IHero):
         return f"is wearing {self.pyjamas} pyjama(s)!"
 
     def just_call_for(self):
-        return f"just call for {self.nickname}"
+        return f"just calls for {self.nickname}"
 
     def just_says(self):
         return "just says: One more shot of whiskey or I'll shoot you"
@@ -70,7 +71,7 @@ class Batman(IHero):
         return f"is wearing {self.pyjamas} pyjama(s)!"
 
     def just_call_for(self):
-        return f"just call for {self.nickname}"
+        return f"just calls for {self.nickname}"
 
     def just_says(self):
         return "just says: I'm gonna have lunch in the bat cave!"
@@ -89,18 +90,22 @@ class Robin(IHero):
         return f"is wearing {self.pyjamas} pyjama(s)!"
 
     def just_call_for(self):
-        return f"just call for {self.nickname}"
+        return f"just calls for {self.nickname}"
 
     def just_says(self):
         return "just says: I'm gonna have a pint!"
 
+    def who_is_my_hero(self):
+        print(f"My hero is {self.__class__.__name__}")
+
 
 class TestingHeroes:
-    _my_hero: IHero = None
+    _my_hero: IHero = Batman()
 
-    def __init__(self, my_hero: IHero) -> None:
+    def __call__(self, my_hero: IHero) -> TestingHeroes:
         self._my_hero = my_hero
         self.hero_name = self._my_hero.__class__.__name__
+        return self
 
     def is_eating_banana(self) -> str:
         return self._my_hero.eating_banana() if self._my_hero.bananas > 0 else \
@@ -117,14 +122,21 @@ class TestingHeroes:
         return self._my_hero.just_says()
 
     def who_is_my_hero(self):
-        f"""
+        print(f"""
         {self.hero_name} is my hero because {self.is_eating_banana()}, 
-        {self.is_wearing_pyjama}, is {self.just_call_for()} and 
+        {self.is_wearing_pyjama()}, {self.just_call_for()} and 
         {self.just_says()}
-        """
+        """)
+
+
+THE_BEST_HERO: IHero = PeakyBlinder()
 
 
 def who_is_my_hero(_my_hero: IHero):
-    testing = TestingHeroes(_my_hero)
+    testing = TestingHeroes()(_my_hero)
 
     testing.who_is_my_hero()
+
+
+def who_is_the_best_hero():
+    who_is_my_hero(THE_BEST_HERO)
