@@ -31,33 +31,26 @@ class TestMockerBuilder(MockerBuilder):
 
         # ========= settimg mocks
         self.add_mock(
-            mock_name='mock_my_hero',
-            target=TestingHeroes,
-            # TODO try mock a _my_hero.just_says
-            # attribute='_my_hero',
-            method='just_says',
-            # new=Batman(),
-            # new_callable=MagicMock(Batman),
-            # spec=Batman(),
-            says=lambda: print('ouieeeeh!'),
-            return_value="Ops! I have been mocked!",
-            # autospec=True,
-            # side_effect=_side_effect
+            mock_name='mock_who_is_my_hero',
+            target=my_heroes.who_is_my_hero,
+            return_value="I have no hero, mate!"
         )
-
+        self.add_mock(
+            mock_name='mock_my_hero',
+            target=TestingHeroes.just_says,
+            says=lambda: print('ouieeeeh!'),
+            return_value="Just says: Ops! I have been mocked!",
+            **{
+                # '_my_hero': Batman(),
+                '_my_hero.eating_banana.return_value': "No No No banana!"
+            }
+        )
         self.add_mock(
             mock_name='mock_the_best_hero',
             target=my_heroes,
             attribute='THE_BEST_HERO',
             new=Batman(),
         )
-
-        # self.add_mock(
-        #     mock_name='mock_who_is_the_best_hero',
-        #     target=my_heroes,
-        #     method='who_is_the_best_hero',
-        #     return_value="I'm my best hero!",
-        # )
 
     @pytest.mark.asyncio
     async def test_my_heroes(self):
@@ -69,9 +62,12 @@ class TestMockerBuilder(MockerBuilder):
         print("The best hero after mocker start:")
         my_heroes.who_is_the_best_hero()
 
+        print("Who is my hero?")
+        my_heroes.who_is_my_hero()
+
         testing_code = TestingHeroes()(self.my_hero)
 
-        assert testing_code.just_says() == "Ops! I have been mocked!"
+        assert testing_code.just_says() == "Just says: Ops! I have been mocked!"
         assert self.mock_my_hero.called
 
         # TODO check if need to inject params to the mock

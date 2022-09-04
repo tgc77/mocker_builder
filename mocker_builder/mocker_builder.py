@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 import inspect
+import warnings
 from unittest.mock import DEFAULT, MagicMock
 import pytest
 from pytest_mock import MockerFixture
@@ -28,6 +29,9 @@ __version__ = "0.1.0"
 
 class MockerBuilderException(Exception):
     """ Exception in MockerBuilder usage or invocation"""
+
+    def __repr__(self) -> str:
+        return "raised MockerBuilderException"
 
 
 @dataclass
@@ -115,7 +119,7 @@ class MockerBuilderImpl:
                 kwargs.update({attr: valeu})
         return kwargs
 
-    def patcher(self, mock_metadata: MockMetadata) -> Union[MagicMock, AsyncMockType]:
+    def __patcher(self, mock_metadata: MockMetadata) -> Union[MagicMock, AsyncMockType]:
         """_summary_
 
         Args:
@@ -124,28 +128,31 @@ class MockerBuilderImpl:
         Returns:
             Union[MagicMock, AsyncMockType]: _description_
         """
-        target = mock_metadata.target
-        method = mock_metadata.method
-        attribute = mock_metadata.attribute
+        _, target, method, attribute, *_ = mock_metadata.unpack()
         _args = [method if method else attribute]
         _kwargs = self._mock_kwargs_builder(mock_metadata)
+        _patch_args = filter(None, [target, *_args])
 
-        if not isinstance(target, str):
+        if inspect.isclass(target):
+            if not _args[0]:
+                raise MockerBuilderException(
+                    "\033[93m"
+                    "You must enter an attribute or method to be mocked"
+                    f" when using target={target.__name__}"
+                    "\033[0m"
+                )
             return self._mocker.patch.object(
-                target,
-                *_args,
+                *_patch_args,
                 **_kwargs
             )
-        elif isinstance(target, dict):
-            return self._mocker.patch.dict(
-                target,
-                *_args,
-                **_kwargs
-            )
-        else:
+        if isinstance(target, str):
             return self._mocker.patch(
-                target,
-                *_args,
+                *_patch_args,
+                **_kwargs
+            )
+        if isinstance(target, dict):
+            return self._mocker.patch.dict(
+                *_patch_args,
                 **_kwargs
             )
 
@@ -159,14 +166,18 @@ class MockerBuilderImpl:
             _type_: _description_
         """
         from importlib import import_module
+        # import ipdb
+        # ipdb.set_trace()
         path, attr = path_attr.rsplit('.', 1)
         module, klass = path.rsplit('.', 1)
-        is_class = getattr(import_module(module), klass)
+        if isinstance(import_module(module), ModuleType):
+            # here we now that module is a module, ouieh!
+            # TODO we need to continue checking here... I'm getting drunk right now so we continue later, uheuhee
+            return getattr(import_module(module), klass)
 
-        if inspect.isclass(is_class):
-            return getattr(is_class, attr)
-
-        return getattr(import_module(path), attr)
+        if inspect.isclass(module):
+            return getattr(module, attr) if attr else module
+        return getattr(import_module(path), attr) if attr else getattr(import_module(module), klass)
 
     def __patch(
         self,
@@ -187,7 +198,6 @@ class MockerBuilderImpl:
         mock_name, target, method, attribute, return_value, side_effect = mock_metadata.unpack()
 
         if return_value and side_effect:
-            import warnings
             warnings.warn(
                 "\033[93mDetected both return_value and side_effect keyword arguments passed to "
                 f"mocker {mock_name}. "
@@ -197,7 +207,6 @@ class MockerBuilderImpl:
 
         if method and attribute:
             attribute = None
-            import warnings
             warnings.warn(
                 "\033[93mDetected both method and attr keyword arguments passed to "
                 f"mocker {mock_name}. Be aware that the method keyword sets a method mock and "
@@ -207,13 +216,15 @@ class MockerBuilderImpl:
         try:
             if inspect.isclass(target):
                 load_args = [target.__module__, target.__name__]
+            elif inspect.isfunction(target):
+                load_args = [target.__module__, target.__qualname__]
             elif inspect.ismodule(target):
                 load_args = [target.__name__]
             elif isinstance(target, str):
                 load_args = [target]
 
             mock_param_path = ".".join(
-                [*load_args, method if method else attribute]
+                [*load_args, method if method else attribute if attribute else '']
             )
             import re
             safe_mock_param_path = re.sub(r'[^A-Za-z0-9_.]+', '', mock_param_path)
@@ -226,7 +237,7 @@ class MockerBuilderImpl:
                 # TODO: Implementar return_value e/ou side_effect condicional Ex if result:...
                 # TODO testar usar side_effect com future...
 
-            self._mocked_method[mock_name] = self.patcher(mock_metadata)
+            self._mocked_method[mock_name] = self.__patcher(mock_metadata)
             if mock_metadata.new == DEFAULT and mock_metadata.kwargs:
                 self._mocked_method[mock_name].configure_mock(**mock_metadata.kwargs)
             setattr(self._test_main_class, mock_name, self._mocked_method[mock_name])

@@ -132,7 +132,7 @@ class TestingHeroes:
 THE_BEST_HERO: IHero = PeakyBlinder()
 
 
-def who_is_my_hero(_my_hero: IHero):
+def who_is_my_hero(_my_hero: IHero = None):
     testing = TestingHeroes()(_my_hero)
 
     testing.who_is_my_hero()
