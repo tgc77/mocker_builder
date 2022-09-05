@@ -23,6 +23,7 @@ Tt = TypeVar('Tt', Callable, ModuleType, str)
 Tv = TypeVar('Tv')
 Tr = TypeVar('Tr', bound=Optional[Any])
 Tse = TypeVar('Tse', bound=Optional[Union[Callable, List]])
+Tattr = TypeVar('Tattr', bound=Union[Callable, str])
 
 __version__ = "0.1.0"
 
@@ -38,8 +39,8 @@ class MockerBuilderException(Exception):
 class MockMetadata:
     mock_name: str
     target: Tt = None
-    method: str = None
-    attribute: str = None
+    method: Tattr = None
+    attribute: Tattr = None
     new: Tv = DEFAULT
     spec: bool = None
     create: bool = False
@@ -133,16 +134,15 @@ class MockerBuilderImpl:
         _kwargs = self._mock_kwargs_builder(mock_metadata)
         _patch_args = filter(None, [target, *_args])
 
-        if inspect.isclass(target):
-            if not _args[0]:
-                raise MockerBuilderException(
-                    "\033[93m"
-                    "You must enter an attribute or method to be mocked"
-                    f" when using target={target.__name__}"
-                    "\033[0m"
-                )
+        if inspect.isclass(target) or inspect.ismodule(target):
             return self._mocker.patch.object(
                 *_patch_args,
+                **_kwargs
+            )
+        if inspect.isfunction(target):
+            _patch_args = ".".join([target.__module__, target.__qualname__])
+            return self._mocker.patch(
+                _patch_args,
                 **_kwargs
             )
         if isinstance(target, str):
@@ -150,6 +150,7 @@ class MockerBuilderImpl:
                 *_patch_args,
                 **_kwargs
             )
+        # TODO Test with dicts
         if isinstance(target, dict):
             return self._mocker.patch.dict(
                 *_patch_args,
@@ -166,18 +167,44 @@ class MockerBuilderImpl:
             _type_: _description_
         """
         from importlib import import_module
-        # import ipdb
-        # ipdb.set_trace()
         path, attr = path_attr.rsplit('.', 1)
-        module, klass = path.rsplit('.', 1)
-        if isinstance(import_module(module), ModuleType):
-            # here we now that module is a module, ouieh!
-            # TODO we need to continue checking here... I'm getting drunk right now so we continue later, uheuhee
-            return getattr(import_module(module), klass)
-
-        if inspect.isclass(module):
-            return getattr(module, attr) if attr else module
-        return getattr(import_module(path), attr) if attr else getattr(import_module(module), klass)
+        # if attr is '' so we know that our mock don't have attribute nor method kwargs setted.
+        # So we need to look if the mock came from a class or a module.
+        if not attr:
+            # Flow without attribute nor method setted.
+            # Here we know that klass may not be a class really and so we need to check if it's
+            # a method or an attribute that can come from a class or a module.
+            module, attr = path.rsplit('.', 1)
+            try:
+                if isinstance(import_module(module), ModuleType):
+                    # here we now that module is really a module, ouieh!
+                    return getattr(import_module(module), attr)
+            except ModuleNotFoundError:
+                # here we check if module actually is a class
+                try:
+                    module, klass = module.rsplit('.', 1)
+                    is_class = getattr(import_module(module), klass)
+                    if inspect.isclass(is_class):
+                        return getattr(is_class, attr)
+                except ModuleNotFoundError:
+                    # Here we don't know really what's coming!
+                    print("### Not identified from where method or attribute is coming from!")
+                    import ipdb
+                    ipdb.set_trace()
+                    what_is_that = getattr(import_module(path), attr)
+                    what_is_this = getattr(import_module(module), klass)
+                    return what_is_that if attr else what_is_this
+        else:
+            # flow with attribute or method setted
+            try:
+                if isinstance(import_module(path), ModuleType):
+                    # here we now that module is really a module, ouieh!
+                    return getattr(import_module(path), attr)
+            except ModuleNotFoundError:
+                module, klass = path.rsplit('.', 1)
+                is_class = getattr(import_module(module), klass)
+                if inspect.isclass(is_class):
+                    return getattr(is_class, attr)
 
     def __patch(
         self,
@@ -348,8 +375,8 @@ class IMockerBuilder(ABC):
         self,
         mock_name: str,
         target: Tk,
-        method: str = None,
-        attribute: str = None,
+        method: Tattr = None,
+        attribute: Tattr = None,
         new: Tv = DEFAULT,
         spec: bool = None,
         create: bool = False,
