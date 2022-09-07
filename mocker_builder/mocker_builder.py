@@ -8,6 +8,7 @@
 from abc import ABC, abstractmethod
 import asyncio
 from dataclasses import dataclass, field
+from importlib import import_module
 from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 import inspect
@@ -92,6 +93,7 @@ class MockerBuilderImpl:
         self._mock_metadata: Dict[str, MockMetadata] = {}
         self._current_mock: MockMetadata = None
         self._test_main_class = None
+        self.load_args: list = None
 
     def _register_test_main_class(self, t_main_class: Tk):
         """_summary_
@@ -130,29 +132,63 @@ class MockerBuilderImpl:
             Union[MagicMock, AsyncMockType]: _description_
         """
         _, target, method, attribute, *_ = mock_metadata.unpack()
-        _args = [method if method else attribute]
+        _args = filter(None, [method if method else attribute])
         _kwargs = self._mock_kwargs_builder(mock_metadata)
-        _patch_args = filter(None, [target, *_args])
+        _patch_args = [target, *_args]
+        # import ipdb
+        # ipdb.set_trace()
+        # TODO IS GONNA GET EASIER IF WE JUST VALIDATE AND PATCH AS STRING
+        # PERHAPS WE'LL NEED TO TEST IF PATCH WORKS WITH MODULE/CLASS ATTRIBUTES MOCKING
 
-        if inspect.isclass(target) or inspect.ismodule(target):
+        # TODO should we check if target is a valid module? It may be a package!
+        if inspect.isclass(target):
+            if not [*_args]:
+                return self._mocker.patch(
+                    ".".join(self.load_args),
+                    **_kwargs
+                )
+                # module, attr = self.load_args
+                # module = import_module(module)
+                # _patch_args = [module, attr]
             return self._mocker.patch.object(
                 *_patch_args,
                 **_kwargs
             )
-        if inspect.isfunction(target):
-            _patch_args = ".".join([target.__module__, target.__qualname__])
-            return self._mocker.patch(
-                _patch_args,
+        if inspect.ismodule(target):
+            if not [*_args]:
+                return self._mocker.patch(
+                    *self.load_args,
+                    **_kwargs
+                )
+            return self._mocker.patch.object(
+                *_patch_args,
                 **_kwargs
             )
-        if isinstance(target, str):
+        if inspect.isroutine(target) or inspect.isdatadescriptor(target):
+            # TODO Here we test if target may be a class attribute or module attr as global
+
+            # if len(target.__qualname__.split('.')) > 1:
+            #     # Here we know that target method come from a class
+            #     klass_path, attr = target.__qualname__.split('.')
+            #     module, klass = klass_path.split('.')
+            #     getattr(import_module(module), klass)
+
+            # path_attr = ".".join([target.__module__, target.__qualname__])
+            # path, attr = path_attr.rsplit('.', 1)
+            # module, klass = path.rsplit('.', 1)
+            target = ".".join([target.__module__, target.__qualname__])
             return self._mocker.patch(
-                *_patch_args,
+                target,
                 **_kwargs
             )
         # TODO Test with dicts
         if isinstance(target, dict):
             return self._mocker.patch.dict(
+                *_patch_args,
+                **_kwargs
+            )
+        if isinstance(target, str):
+            return self._mocker.patch(
                 *_patch_args,
                 **_kwargs
             )
@@ -166,7 +202,9 @@ class MockerBuilderImpl:
         Returns:
             _type_: _description_
         """
-        from importlib import import_module
+        # TODO: You should save state of the imported mock target so we can use it along
+        # the process flow
+
         path, attr = path_attr.rsplit('.', 1)
         # if attr is '' so we know that our mock don't have attribute nor method kwargs setted.
         # So we need to look if the mock came from a class or a module.
@@ -177,10 +215,12 @@ class MockerBuilderImpl:
             module, attr = path.rsplit('.', 1)
             try:
                 if isinstance(import_module(module), ModuleType):
-                    # here we now that module is really a module, ouieh!
+                    # Here we know that module is really a module, ouieh!
+                    # TODO perhaps we will use that way
+                    # self._current_mock.target = getattr(import_module(module), attr)
                     return getattr(import_module(module), attr)
             except ModuleNotFoundError:
-                # here we check if module actually is a class
+                # Here we check if module actually is a class
                 try:
                     module, klass = module.rsplit('.', 1)
                     is_class = getattr(import_module(module), klass)
@@ -189,16 +229,14 @@ class MockerBuilderImpl:
                 except ModuleNotFoundError:
                     # Here we don't know really what's coming!
                     print("### Not identified from where method or attribute is coming from!")
-                    import ipdb
-                    ipdb.set_trace()
                     what_is_that = getattr(import_module(path), attr)
                     what_is_this = getattr(import_module(module), klass)
                     return what_is_that if attr else what_is_this
         else:
-            # flow with attribute or method setted
+            # Flow with attribute or method setted
             try:
                 if isinstance(import_module(path), ModuleType):
-                    # here we now that module is really a module, ouieh!
+                    # Here we now that module is really a module, ouieh!
                     return getattr(import_module(path), attr)
             except ModuleNotFoundError:
                 module, klass = path.rsplit('.', 1)
@@ -242,16 +280,21 @@ class MockerBuilderImpl:
             )
         try:
             if inspect.isclass(target):
-                load_args = [target.__module__, target.__name__]
-            elif inspect.isfunction(target):
-                load_args = [target.__module__, target.__qualname__]
+                self.load_args = [target.__module__, target.__name__]
+            elif inspect.isroutine(target):
+                self.load_args = [target.__module__, target.__qualname__]
             elif inspect.ismodule(target):
-                load_args = [target.__name__]
+                self.load_args = [target.__name__]
             elif isinstance(target, str):
-                load_args = [target]
+                self.load_args = [target]
+            else:
+                warnings.warn(
+                    "###\033[93m target not identified so just dispatching as we received.\033[0m"
+                )
+                self.load_args = [target]
 
             mock_param_path = ".".join(
-                [*load_args, method if method else attribute if attribute else '']
+                [*self.load_args, method if method else attribute if attribute else '']
             )
             import re
             safe_mock_param_path = re.sub(r'[^A-Za-z0-9_.]+', '', mock_param_path)
@@ -260,13 +303,13 @@ class MockerBuilderImpl:
             if inspect.iscoroutinefunction(check_mock_param):
                 future = asyncio.Future()
                 future.set_result(return_value)
-                mock_metadata.return_value = future
+                self._current_mock.return_value = future
                 # TODO: Implementar return_value e/ou side_effect condicional Ex if result:...
                 # TODO testar usar side_effect com future...
 
-            self._mocked_method[mock_name] = self.__patcher(mock_metadata)
-            if mock_metadata.new == DEFAULT and mock_metadata.kwargs:
-                self._mocked_method[mock_name].configure_mock(**mock_metadata.kwargs)
+            self._mocked_method[mock_name] = self.__patcher(self._current_mock)
+            if self._current_mock.new == DEFAULT and self._current_mock.kwargs:
+                self._mocked_method[mock_name].configure_mock(**self._current_mock.kwargs)
             setattr(self._test_main_class, mock_name, self._mocked_method[mock_name])
         except Exception as ex:
             raise MockerBuilderException(ex)

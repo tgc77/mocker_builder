@@ -26,10 +26,22 @@ class IHero(ABC):
 
 
 @dataclass
-class FakeHero:
+class FakeHero(IHero):
     bananas: int = 2
     pyjamas: int = 2
     nickname: str = 'Bad Fat Hero'
+
+    def eating_banana(self):
+        return f"is eating {self.bananas} banana(s)!"
+
+    def wearing_pyjama(self):
+        return f"is wearing {self.pyjamas} pyjama(s)!"
+
+    def just_call_for(self):
+        return f"just calls for {self.nickname}"
+
+    def just_says(self):
+        return "just says: I'm fake hero man!"
 
     def to_dict(self):
         return {
@@ -130,6 +142,7 @@ class TestingHeroes:
 
 
 THE_BEST_HERO: IHero = PeakyBlinder()
+OTHER_HERO: IHero = None
 
 
 def who_is_my_hero(_my_hero: IHero = None):
@@ -140,3 +153,24 @@ def who_is_my_hero(_my_hero: IHero = None):
 
 def who_is_the_best_hero():
     who_is_my_hero(THE_BEST_HERO)
+
+
+def initialize_other_hero():
+    global OTHER_HERO
+    OTHER_HERO = FakeHero()
+
+
+initialize_other_hero()
+
+__all__ = [
+    "IHero",
+    "FakeHero",
+    "PeakyBlinder",
+    "Batman",
+    "Robin",
+    "TestingHeroes",
+    "THE_BEST_HERO",
+    "OTHER_HERO",
+    "who_is_my_hero",
+    "who_is_the_best_hero",
+]
