@@ -10,10 +10,12 @@ import asyncio
 from dataclasses import dataclass, field
 from importlib import import_module
 from types import ModuleType
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import (
+    Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, Union, overload
+)
 import inspect
 import warnings
-from unittest.mock import DEFAULT, MagicMock
+from unittest.mock import DEFAULT, MagicMock, _patch
 import pytest
 from pytest_mock import MockerFixture
 from pytest_mock.plugin import AsyncMockType
@@ -26,7 +28,15 @@ Tr = TypeVar('Tr', bound=Optional[Any])
 Tse = TypeVar('Tse', bound=Optional[Union[Callable, List]])
 Tattr = TypeVar('Tattr', bound=Union[Callable, str])
 
-__version__ = "0.1.0"
+_MockType = TypeVar('_MockType', bound=Union[MagicMock, AsyncMockType])
+_TP = TypeVar('_TP', bound=_patch)  # or can be _MockType
+
+
+__version__ = "1.0"
+
+
+class MockerBuilderWarning(UserWarning):
+    """Base class for all warnings emitted by mocker-builder."""
 
 
 class MockerBuilderException(Exception):
@@ -34,6 +44,10 @@ class MockerBuilderException(Exception):
 
     def __repr__(self) -> str:
         return "raised MockerBuilderException"
+
+
+class Patcher(Generic[_TP]):
+    pass
 
 
 @dataclass
@@ -89,7 +103,7 @@ class MockerBuilderImpl:
 
     def __init__(self, mocker: MockerFixture) -> None:
         self._mocker = mocker
-        self._mocked_method: Dict[str, Union[MagicMock, AsyncMockType]] = {}
+        self._mocked_method: Dict[str, _MockType] = {}
         self._mock_metadata: Dict[str, MockMetadata] = {}
         self._current_mock: MockMetadata = None
         self._test_main_class = None
@@ -122,7 +136,7 @@ class MockerBuilderImpl:
                 kwargs.update({attr: valeu})
         return kwargs
 
-    def __patcher(self, mock_metadata: MockMetadata) -> Union[MagicMock, AsyncMockType]:
+    def __patcher(self, mock_metadata: MockMetadata) -> Patcher[_TP]:
         """_summary_
 
         Args:
@@ -132,7 +146,7 @@ class MockerBuilderImpl:
             Union[MagicMock, AsyncMockType]: _description_
         """
         _, target, method, attribute, *_ = mock_metadata.unpack()
-        _args = filter(None, [method if method else attribute])
+        _args = list(filter(None, [method if method else attribute]))
         _kwargs = self._mock_kwargs_builder(mock_metadata)
         _patch_args = [target, *_args]
         # import ipdb
@@ -142,7 +156,7 @@ class MockerBuilderImpl:
 
         # TODO should we check if target is a valid module? It may be a package!
         if inspect.isclass(target):
-            if not [*_args]:
+            if not _args:
                 return self._mocker.patch(
                     ".".join(self.load_args),
                     **_kwargs
@@ -155,7 +169,7 @@ class MockerBuilderImpl:
                 **_kwargs
             )
         if inspect.ismodule(target):
-            if not [*_args]:
+            if not _args:
                 return self._mocker.patch(
                     *self.load_args,
                     **_kwargs
@@ -204,7 +218,8 @@ class MockerBuilderImpl:
         """
         # TODO: You should save state of the imported mock target so we can use it along
         # the process flow
-
+        # import ipdb
+        # ipdb.set_trace()
         path, attr = path_attr.rsplit('.', 1)
         # if attr is '' so we know that our mock don't have attribute nor method kwargs setted.
         # So we need to look if the mock came from a class or a module.
@@ -229,9 +244,12 @@ class MockerBuilderImpl:
                 except ModuleNotFoundError:
                     # Here we don't know really what's coming!
                     print("### Not identified from where method or attribute is coming from!")
-                    what_is_that = getattr(import_module(path), attr)
-                    what_is_this = getattr(import_module(module), klass)
-                    return what_is_that if attr else what_is_this
+                    try:
+                        what_is_that = getattr(import_module(path), attr)
+                        what_is_this = getattr(import_module(module), klass)
+                        return what_is_that if attr else what_is_this
+                    except Exception as e:
+                        raise MockerBuilderException(e)
         else:
             # Flow with attribute or method setted
             try:
@@ -310,6 +328,8 @@ class MockerBuilderImpl:
             self._mocked_method[mock_name] = self.__patcher(self._current_mock)
             if self._current_mock.new == DEFAULT and self._current_mock.kwargs:
                 self._mocked_method[mock_name].configure_mock(**self._current_mock.kwargs)
+            # TODO We need to create a proper data structure to enable test_main_class
+            # to have autocomplete MagicMock params
             setattr(self._test_main_class, mock_name, self._mocked_method[mock_name])
         except Exception as ex:
             raise MockerBuilderException(ex)
@@ -335,8 +355,25 @@ class MockerBuilderImpl:
                 mock_metadata
             )
 
-    def get_mock(self, mock_name: str) -> Union[MockMetadata, None]:
+    def _get_mock_metadata(self, mock_name: str) -> Union[MockMetadata, None]:
         return self._mock_metadata.get(mock_name)
+
+    def _stop_mock(self, _mock: _MockType):
+        for mock in self._mocker._patches:
+            if mock.get_original()[0]._extract_mock_name() == _mock._extract_mock_name():
+                mock.stop()
+                break
+
+    def _start_mock(self, _mock: _MockType):
+        for mock in self._mocker._patches:
+            if hasattr(mock.get_original()[0], '__name__'):
+                if mock.get_original()[0].__name__ == _mock._extract_mock_name():
+                    print("Mock started...")
+                    mock.start()
+                    # TODO We need to restore the _mock reference so we don't need to call
+                    # self.mocker_builder_start() again.
+                    _mock = mock.get_original()[0]  # this is not working
+                    break
 
     ###########################################################################################
     # TODO refactor to enable access mock methods asserts from our mocker-builder
@@ -387,17 +424,41 @@ class MockerBuilderImpl:
 
 
 class IMockerBuilder(ABC):
+    """_summary_
+
+    Args:
+        ABC (_type_): _description_
+
+    Returns:
+        _type_: _description_
+
+    Yields:
+        _type_: _description_
+    """
     __mocker_builder: MockerBuilderImpl = None
     __fixtures: Dict = {}
+    _mocker: MockerFixture = None  # TODO We need that?
 
     def initializer(fnc):
         @pytest.fixture(autouse=True)
-        def builder(test_main_class, mocker):
+        def builder(test_main_class: IMockerBuilder, mocker):
+            """_summary_
+
+            Args:
+                test_main_class (IMockerBuilder): _description_
+                mocker (_type_): _description_
+
+            Yields:
+                _type_: _description_
+            """
             print("\n#################### mocker_builder_create ##################")
-            IMockerBuilder.__mocker_builder = MockerBuilderImpl(mocker)
-            IMockerBuilder.__mocker_builder._register_test_main_class(test_main_class)
-            setattr(test_main_class, 'mocker', mocker)
-            yield fnc(test_main_class)
+            test_main_class.__mocker_builder = MockerBuilderImpl(mocker)
+            test_main_class.__mocker_builder._register_test_main_class(test_main_class)
+            # TODO Perhaps it's good to enable the mocker to the TestMainClass
+            test_main_class._mocker = mocker
+            fnc(test_main_class)
+            yield test_main_class.mocker_builder_start()
+            del test_main_class.__mocker_builder
             # TODO need to run gc.collect() or clean memory from here ?
         return builder
 
@@ -408,7 +469,11 @@ class IMockerBuilder(ABC):
     # TODO refactor the way we create and provide them
     # perhaps also for impl into this function alls fixtures and inject them instead always
     # call self.fixture_register(...)
-    def fixture_register(self, name, return_value):
+    def fixture_register(
+        self,
+        name,
+        return_value: Optional[Tr] = None
+    ):
         self.__fixtures.update({
             name: return_value
         })
@@ -418,17 +483,17 @@ class IMockerBuilder(ABC):
         self,
         mock_name: str,
         target: Tk,
-        method: Tattr = None,
-        attribute: Tattr = None,
-        new: Tv = DEFAULT,
-        spec: bool = None,
-        create: bool = False,
-        spec_set: bool = None,
-        autospec: Union[bool, Callable] = None,
-        new_callable: Callable = None,
-        return_value: Tr = None,
-        side_effect: Tse = None,
-        active: bool = True,
+        method: Optional[Tattr] = None,
+        attribute: Optional[Tattr] = None,
+        new: Optional[Tv] = DEFAULT,
+        spec: Optional[bool] = None,
+        create: Optional[bool] = False,
+        spec_set: Optional[bool] = None,
+        autospec: Optional[Union[bool, Callable]] = None,
+        new_callable: Optional[Callable] = None,
+        return_value: Optional[Tr] = None,
+        side_effect: Optional[Tse] = None,
+        active: Optional[bool] = True,
         **kwargs
     ):
         mock_metadata = MockMetadata(
@@ -456,5 +521,11 @@ class IMockerBuilder(ABC):
         self.__mocker_builder._start()
 
     # TODO should we enable mock_metadata changes after initializer and start ?
-    def get_mock(self, mock_name: str) -> Union[MockMetadata, None]:
-        return self.__mocker_builder.get_mock(mock_name)
+    def get_mock_metadata(self, mock_name: str) -> Union[MockMetadata, None]:
+        return self.__mocker_builder._get_mock_metadata(mock_name)
+
+    def stop_mock(self, _mock: _MockType):
+        self.__mocker_builder._stop_mock(_mock)
+
+    def start_mock(self, _mock: _MockType):
+        self.__mocker_builder._start_mock(_mock)

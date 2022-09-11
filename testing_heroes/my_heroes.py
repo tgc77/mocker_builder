@@ -32,16 +32,16 @@ class FakeHero(IHero):
     nickname: str = 'Bad Fat Hero'
 
     def eating_banana(self):
-        return f"is eating {self.bananas} banana(s)!"
+        return f"is eating {self.bananas} banana(s)"
 
     def wearing_pyjama(self):
-        return f"is wearing {self.pyjamas} pyjama(s)!"
+        return f"is wearing {self.pyjamas} pyjama(s)"
 
     def just_call_for(self):
         return f"just calls for {self.nickname}"
 
     def just_says(self):
-        return "just says: I'm fake hero man!"
+        return "I'm fake hero man!"
 
     def to_dict(self):
         return {
@@ -58,16 +58,16 @@ class PeakyBlinder(IHero):
     nickname: str = "Tomas Shelby"
 
     def eating_banana(self):
-        return f"is eating {self.bananas} banana(s)!"
+        return f"is eating {self.bananas} banana(s)"
 
     def wearing_pyjama(self):
-        return f"is wearing {self.pyjamas} pyjama(s)!"
+        return f"is wearing {self.pyjamas} pyjama(s)"
 
     def just_call_for(self):
         return f"just calls for {self.nickname}"
 
     def just_says(self):
-        return "just says: One more shot of whiskey or I'll shoot you"
+        return "One more shot of whiskey or I'll shoot you"
 
 
 @dataclass
@@ -77,16 +77,16 @@ class Batman(IHero):
     nickname: str = "Big Fat Bat"
 
     def eating_banana(self):
-        return f"is eating {self.bananas} banana(s)!"
+        return f"is eating {self.bananas} banana(s)"
 
     def wearing_pyjama(self):
-        return f"is wearing {self.pyjamas} pyjama(s)!"
+        return f"is wearing {self.pyjamas} pyjama(s)"
 
     def just_call_for(self):
         return f"just calls for {self.nickname}"
 
     def just_says(self):
-        return "just says: I'm gonna have lunch in the bat cave!"
+        return "I'm gonna have lunch in the bat cave!"
 
 
 @dataclass
@@ -96,36 +96,58 @@ class Robin(IHero):
     nickname: str = "Little Bastard"
 
     def eating_banana(self):
-        return f"is eating {self.bananas} banana(s)!"
+        return f"is eating {self.bananas} banana(s)"
 
     def wearing_pyjama(self):
-        return f"is wearing {self.pyjamas} pyjama(s)!"
+        return f"is wearing {self.pyjamas} pyjama(s)"
 
     def just_call_for(self):
         return f"just calls for {self.nickname}"
 
     def just_says(self):
-        return "just says: I'm gonna have a pint!"
-
-    def who_is_my_hero(self):
-        print(f"My hero is {self.__class__.__name__}")
+        return "I'm gonna have a pint!"
 
 
-class TestingHeroes:
-    _my_hero: IHero = Batman()
+@dataclass
+class OtherHero(IHero):
+    bananas: int = 1
+    pyjamas: int = 1
+    nickname: str = "Bob"
 
-    def __call__(self, my_hero: IHero) -> TestingHeroes:
-        self._my_hero = my_hero
-        self.hero_name = self._my_hero.__class__.__name__
-        return self
+    def eating_banana(self):
+        return f"is eating {self.bananas} banana(s)"
+
+    def wearing_pyjama(self):
+        return f"is wearing {self.pyjamas} pyjama(s)"
+
+    def just_call_for(self):
+        return f"just calls for {self.nickname}"
+
+    def just_says(self):
+        return "Ouieh!"
+
+
+class MyHeroes:
+    _my_hero: IHero = None
+
+    # def __call__(self, my_hero: IHero) -> MyHeroes:
+    #     self._my_hero = my_hero
+    #     self.hero_name = self._my_hero.__class__.__name__
+    #     return self
+
+    @property
+    def my_hero(self):
+        return self._my_hero
+
+    @my_hero.setter
+    def my_hero(self, hero):
+        self._my_hero = hero
 
     def is_eating_banana(self) -> str:
-        return self._my_hero.eating_banana() if self._my_hero.bananas > 0 else \
-            "don't have any banana"
+        return self._my_hero.eating_banana()
 
     def is_wearing_pyjama(self) -> str:
-        return self._my_hero.wearing_pyjama() if self._my_hero.pyjamas > 0 else \
-            "is not wearing pyjama"
+        return self._my_hero.wearing_pyjama()
 
     def just_call_for(self) -> str:
         return self._my_hero.just_call_for()
@@ -135,10 +157,31 @@ class TestingHeroes:
 
     def who_is_my_hero(self):
         print(f"""
-        {self.hero_name} is my hero because {self.is_eating_banana()}, 
-        {self.is_wearing_pyjama()}, {self.just_call_for()} and 
+        {self._my_hero.__class__.__name__} is my hero because {self.is_eating_banana()},
+        {self.is_wearing_pyjama()}, {self.just_call_for()} and just says: 
         {self.just_says()}
         """)
+
+
+class SomeoneWhoLovesHero():
+    _my_hero: IHero = None
+
+    @property
+    def my_hero(self):
+        return self._my_hero
+
+    @my_hero.setter
+    def my_hero(self, hero):
+        self._my_hero = hero
+
+    def asks_to_other_hero_about_been_hero(self):
+        return self._my_hero.just_says()
+
+
+def asks_what_other_hero_have_to_say_about_been_hero():
+    someone_who_loves_hero = SomeoneWhoLovesHero()
+    someone_who_loves_hero.my_hero = OtherHero()
+    return someone_who_loves_hero.asks_to_other_hero_about_been_hero()
 
 
 THE_BEST_HERO: IHero = PeakyBlinder()
@@ -146,12 +189,13 @@ OTHER_HERO: IHero = None
 
 
 def who_is_my_hero(_my_hero: IHero = None):
-    testing = TestingHeroes()(_my_hero)
-
+    testing = MyHeroes()
+    testing.my_hero = _my_hero
     testing.who_is_my_hero()
 
 
 def who_is_the_best_hero():
+    initialize_other_hero()
     who_is_my_hero(THE_BEST_HERO)
 
 
@@ -160,15 +204,13 @@ def initialize_other_hero():
     OTHER_HERO = FakeHero()
 
 
-initialize_other_hero()
-
 __all__ = [
     "IHero",
     "FakeHero",
     "PeakyBlinder",
     "Batman",
     "Robin",
-    "TestingHeroes",
+    "MyHeroes",
     "THE_BEST_HERO",
     "OTHER_HERO",
     "who_is_my_hero",

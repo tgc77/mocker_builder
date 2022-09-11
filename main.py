@@ -6,14 +6,16 @@ import pytest
 
 from mocker_builder import MockerBuilder
 from testing_heroes import my_heroes
-from testing_heroes.my_heroes import Batman, FakeHero, IHero, PeakyBlinder, Robin, TestingHeroes, who_is_my_hero
+from testing_heroes.my_heroes import (
+    Batman, FakeHero, IHero, OtherHero, PeakyBlinder, Robin, MyHeroes
+)
 
 
 def foo():
     print("Something")
 
 
-class TestMockerBuilder(MockerBuilder):
+class TestMyHeroes(MockerBuilder):
 
     @MockerBuilder.initializer
     def mocker_builder_initializer(self):
@@ -28,139 +30,87 @@ class TestMockerBuilder(MockerBuilder):
             )
         )
         # ==================== Works ======================
-        # self.add_mock(
-        #     mock_name="mock_test_io",
-        #     target='sys.stdout',
-        #     new_callable=StringIO
-        # )
+        self.add_mock(
+            mock_name="mock_test_io",
+            target='sys.stdout',
+            new_callable=StringIO
+        )
 
         self.add_mock(
-            mock_name="mock_testing_heroes_class",
-            target=TestingHeroes
+            mock_name="mock_my_heroes_class",
+            target=MyHeroes
         )
-        # =================================================
 
         self.add_mock(
             mock_name="mock_my_heroes_module",
             target=my_heroes.initialize_other_hero,
-            # autospec=True
         )
 
-        # self.add_mock(
-        #     mock_name='mock_my_hero',
-        #     target=TestingHeroes._my_hero,
-        #     **{
-        #         'method.return_value': 3,
-        #         'other.side_effect': KeyError
-        #     }
-        # )
-        self.mocker_builder_start()
+        self.add_mock(
+            mock_name='mock_my_hero',
+            target=MyHeroes,
+            attribute='_my_hero',
+            **{
+                'eating_banana.return_value': "Banana Noooo!",
+                'just_says.side_effect': ["Nothing to say!"]
+            }
+        )
 
-    def est_io(self):
+        self.add_mock(
+            mock_name="mock_my_class",
+            target=OtherHero,
+            **{
+                'return_value.just_says.return_value': "He feels good!"
+            }
+        )
+
+        self.add_mock(
+            mock_name='mock_who_is_my_hero',
+            target=Batman,
+            **{
+                'return_value.eating_banana.return_value': "doesn't like banana",
+                'return_value.wearing_pyjama.return_value': "doesn't wear pyjama",
+                'return_value.just_call_for.return_value': "Mocker",
+                'return_value.just_says.return_value': "I'm gonna mock you babe!",
+            }
+        )
+        # =================================================
+
+    def test_io(self):
         foo()
         assert self.mock_test_io.getvalue() == 'Something\n'
 
-    def test_mock_testing_heroes_class(self):
+    def test_mock_my_heroes_class(self):
         my_heroes.who_is_the_best_hero()
 
-        assert self.mock_testing_heroes_class.called
+        assert self.mock_my_heroes_class.called
 
-    def est_mock_my_heroes_module(self):
+    def test_mock_my_heroes_module(self):
+        # TODO We need to work on this feature yet
+        # self.stop_mock(self.mock_my_heroes_module)
         # my_heroes.who_is_the_best_hero()
 
-        # assert not self.mock_my_heroes_module.initialize_other_hero.called
+        # assert not self.mock_my_heroes_module.called
+
+        # self.start_mock(self.mock_my_heroes_module)
+        # TODO when restart the mock self.mock_my_heroes_module
+        # loses the reference
+        # self.mocker_builder_start()
+        my_heroes.who_is_the_best_hero()
+
         assert self.mock_my_heroes_module.called
 
-    def est_my_hero(self):
-        pass
-        # assert self.mock_object.method() == 3
-        # with pytest.raises(KeyError) as err:
-        #     assert self.mock_object.other() == err
+    def test_my_hero(self):
+        assert self.mock_my_hero.eating_banana() == "Banana Noooo!"
+        assert self.mock_my_hero.just_says() == "Nothing to say!"
 
-        # def _side_effect(my_hero: IHero):
-        #     ...
-        # ========= settimg mocks
-        # self.add_mock(
-        #     mock_name='mock_who_is_my_hero',
-        #     target=my_heroes.who_is_my_hero,
-        #     return_value="I have no hero, mate!"
-        # )
+    def test_my_class(self):
+        response = my_heroes.asks_what_other_hero_have_to_say_about_been_hero()
+        assert response == "He feels good!"
 
-        # self.add_mock(
-        #     mock_name='mock_my_hero__call__',
-        #     target=TestingHeroes.__call__,
-        #     side_effect=lambda _my_hero: Robin()
-        # )
+    def test_who_is_my_hero(self):
+        my_heroes.who_is_my_hero(Batman())
 
-        # TODO this test passed but looks wird the configure_mock
-        # self.add_mock(
-        #     mock_name='mock_my_hero',
-        #     target=TestingHeroes,
-        #     attribute='_my_hero',
-        #     **{
-        #         # '_my_hero': Robin(),
-        #         '_my_hero.eating_banana': "No No No banana!",
-        #         '_my_hero.just_says': "I have nothing to say!"
-        #     }
-        # )
-
-        # self.add_mock(
-        #     mock_name='mock_my_hero_II',
-        #     target=TestingHeroes,
-        #     method='just_says',
-        #     return_value="Just says: Ops! I have been mocked too!",
-        # )
-
-        # self.add_mock(
-        #     mock_name='mock_the_best_hero',
-        #     target=my_heroes,
-        #     attribute='THE_BEST_HERO',
-        #     new=Batman(),
-        # )
-
-        # self.add_mock(
-        #     mock_name='mock_other_hero',
-        #     target=my_heroes.OTHER_HERO,
-        #     new=Robin(),
-        # )
-
-    @pytest.mark.asyncio
-    async def est_my_heroes(self):
-        print("The best hero before mocker start:")
-        my_heroes.who_is_the_best_hero()
-
-        self.mocker_builder_start()
-
-        print("The best hero after mocker start:")
-        my_heroes.who_is_the_best_hero()
-
-        # print(
-        #     "Who is my hero?",
-        #     my_heroes.who_is_my_hero()
-        # )
-
-        # testing_code = TestingHeroes()(self.my_hero)
-
-        # assert testing_code.just_says() == "Just says: Ops! I have been mocked!"
-        # assert self.mock_my_hero.called
-
-        # TODO check if need to inject params to the mock
-        # perhaps should create keyword configure_mock to accept
-        # a dict config {'_my_hero.just_says'}
-        # self.mock_my_hero.says()
-
-        # assert testing_code._my_hero.bananas == 12
-        # assert testing_code._my_hero.pyjamas == 7
-        # assert testing_code._my_hero.nickname == "Bellboy"
-
-        # ('testing_heroes.my_heroes.who_is_my_hero', '')
-        # ('testing_heroes.my_heroes', 'who_is_my_hero')
-
-        # ('testing_heroes.my_heroes', 'who_is_my_hero')
-        # ('testing_heroes', 'my_heroes')
-
-        # ('testing_heroes.my_heroes.TestingHeroes.just_says', '')
-        # ('testing_heroes.my_heroes.TestingHeroes', 'just_says')
-
-        # ('testing_heroes.my_heroes.TestingHeroes', 'just_says')
-        # ('testing_heroes.my_heroes', 'TestingHeroes')
+        testing = MyHeroes()
+        testing.my_hero = my_heroes.Batman()
+        testing.who_is_my_hero()
