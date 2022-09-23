@@ -1,134 +1,111 @@
 from dataclasses import dataclass
+from io import StringIO
 from typing import Union
+from unittest.mock import MagicMock
 import pytest
 
 from mocker_builder import MockerBuilder
+from testing_heroes import my_heroes
+from testing_heroes.my_heroes import (
+    Batman, FakeHero, IHero, OtherHero, PeakyBlinder, Robin, MyHeroes
+)
 
 
-@dataclass
-class FakeUser:
-    id = 2
-    cpf = '12345678911'
-    email = 'teste@teste.com'
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'cpf': self.cpf,
-            'email': self.email
-        }
+def foo():
+    print("Something")
 
 
-@dataclass
-class MyFixture:
-    cpf: str = None
-    email: str = None
-
-
-@dataclass
-class Batman:
-    a: int = 1
-    b: int = 2
-
-    def racking_you(self):
-        print(f"{self.__class__.__name__} Can I rack you?")
-
-    def another_func(self):
-        print(f"{self.__class__.__name__} Hi there! I'am another func!")
-
-    def show_my_klass(self):
-        print(self.__dict__)
-
-
-@dataclass
-class SpyderMan:
-    a: int = 3
-    b: int = 4
-
-    def racking_you(self):
-        print(f"{self.__class__.__name__} Can I rack you?")
-
-    def another_func(self):
-        print(f"{self.__class__.__name__} Hi there! I'am another func!")
-
-    def show_my_klass(self):
-        print(self.__dict__)
-
-
-class TestingCode:
-    _my_klass: Union[Batman, SpyderMan] = None
-
-    def racking_you(self):
-        self._my_klass.racking_you()
-
-    def another_func(self):
-        self._my_klass.another_func()
-
-    def show_my_klass(self):
-        self._my_klass.show_my_klass()
-
-    def func_call_test(self):
-        try:
-            self.func_test()
-        except Exception as e:
-            print(f"Opps2! {e}")
-            try:
-                self._my_klass.func_test()
-            except Exception as e:
-                print(f"Opps3! {e}")
-
-
-class TestMockerBuilder(MockerBuilder):
+class TestMyHeroes(MockerBuilder):
 
     @MockerBuilder.initializer
     def mocker_builder_initializer(self):
-        print("######################### initializer #################################")
+        print("######################### initializer #######################")
         # ========= setting fixtures
         self.fixture_register(
-            name="my_fixture",
-            return_value=MyFixture(
-                cpf='12345678901',
-                email='teste@teste.bla'
+            name="my_hero",
+            return_value=PeakyBlinder(
+                bananas=12,
+                pyjamas=7,
+                nickname="Bellboy"
             )
         )
+        # ==================== Works ======================
+        # self.add_mock(
+        #     mock_name="mock_test_io",
+        #     target='sys.stdout',
+        #     new_callable=StringIO
+        # )
 
-        async def _side_effect(*args, **kwargs):
-            # print("Testing side_effect returning DEFAULT")
-            # return DEFAULT
-            class Fake:
-                async def get(self, **kwargs):
-                    return FakeUser()
-            return Fake()
+        # self.add_mock(
+        #     mock_name="mock_my_heroes_class",
+        #     target=MyHeroes
+        # )
 
-        # ========= settimg mocks
-        self.add_mock(
-            mock_name='mock_testing_code',
-            klass=TestingCode,
-            attribute='_my_klass',
-            # new=Batman(),
-            # new_callable=MagicMock(Batman),
-            # spec=Batman(),
-            func_test=lambda: print('ouieeeeh!'),
-            return_value=Batman(),
-            # autospec=True,
-            # side_effect=_side_effect
+        self.mock_my_heroes_module = self.add_mock(
+            mock_name="mock_my_heroes_module",
+            target=my_heroes.initialize_other_hero
         )
 
-    @pytest.mark.asyncio
-    async def test_execute_success(self):
-        self.mocker_builder_start()
+        # self.add_mock(
+        #     mock_name='mock_my_hero',
+        #     target=MyHeroes,
+        #     attribute='_my_hero',
+        #     **{
+        #         'eating_banana.return_value': "Banana Noooo!",
+        #         'just_says.side_effect': ["Nothing to say!"]
+        #     }
+        # )
 
-        testing_code = TestingCode()
-        try:
-            self.mock_testing_code.func_test()
-        except Exception as e:
-            print(f"Eita! {e}")
+        # self.add_mock(
+        #     mock_name="mock_my_class",
+        #     target=OtherHero,
+        #     **{
+        #         'return_value.just_says.return_value': "He feels good!"
+        #     }
+        # )
 
-        testing_code.func_call_test()
+        # self.add_mock(
+        #     mock_name='mock_who_is_my_hero',
+        #     target=Batman,
+        #     **{
+        #         'return_value.eating_banana.return_value': "doesn't like banana",
+        #         'return_value.wearing_pyjama.return_value': "doesn't wear pyjama",
+        #         'return_value.just_call_for.return_value': "Mocker",
+        #         'return_value.just_says.return_value': "I'm gonna mock you babe!",
+        #     }
+        # )
+        # =================================================
 
-        testing_code.racking_you()
-        testing_code.another_func()
-        testing_code.show_my_klass()
+    def est_io(self):
+        foo()
+        assert self.mock_test_io.getvalue() == 'Something\n'
 
-        assert self.my_fixture.cpf == "12345678901"
-        assert self.my_fixture.email == 'teste@teste.bla'
+    def est_mock_my_heroes_class(self):
+        my_heroes.who_is_the_best_hero()
+
+        assert self.mock_my_heroes_class.called
+
+    def test_mock_my_heroes_module(self):
+        # TODO We need to work on this feature yet
+        self.stop_mock(self.mock_my_heroes_module)
+        my_heroes.who_is_the_best_hero()
+        assert not self.mock_my_heroes_module.called
+
+        self.start_mock(self.mock_my_heroes_module)
+        my_heroes.who_is_the_best_hero()
+        assert self.mock_my_heroes_module.called
+
+    def est_my_hero(self):
+        assert self.mock_my_hero.eating_banana() == "Banana Noooo!"
+        assert self.mock_my_hero.just_says() == "Nothing to say!"
+
+    def est_my_class(self):
+        response = my_heroes.asks_what_other_hero_have_to_say_about_been_hero()
+        assert response == "He feels good!"
+
+    def est_who_is_my_hero(self):
+        my_heroes.who_is_my_hero(Batman())
+
+        testing = MyHeroes()
+        testing.my_hero = my_heroes.Batman()
+        testing.who_is_my_hero()
