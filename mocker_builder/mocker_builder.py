@@ -1,3 +1,4 @@
+# from __future__ import annotations
 # mocker_builder.py
 # Test tools for mocking and patching.
 # Maintained by Tiago G Cunha
@@ -11,7 +12,7 @@ from dataclasses import dataclass, field
 from importlib import import_module
 from types import ModuleType
 from typing import (
-    Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, Union, overload
+    Any, Callable, Dict, Generic, List, NewType, Optional, Tuple, TypeVar, Union
 )
 import inspect
 import warnings
@@ -20,16 +21,18 @@ import pytest
 from pytest_mock import MockerFixture
 from pytest_mock.plugin import AsyncMockType
 
-Tk = TypeVar('Tk', bound=Optional[Callable])
-Tm = TypeVar('Tm', bound=Optional[ModuleType])
-Tt = TypeVar('Tt', Callable, ModuleType, str)
-Tv = TypeVar('Tv')
-Tr = TypeVar('Tr', bound=Optional[Any])
-Tse = TypeVar('Tse', bound=Optional[Union[Callable, List]])
-Tattr = TypeVar('Tattr', bound=Union[Callable, str])
-
 _MockType = TypeVar('_MockType', bound=Union[MagicMock, AsyncMockType])
 _TP = TypeVar('_TP', bound=_patch)  # or can be _MockType
+
+
+MockType = NewType('MockType', MagicMock)
+_TMockType = TypeVar('_TMockType', bound=MockType)
+TargetType = TypeVar('TargetType', Callable, ModuleType, str)
+TypeNew = TypeVar('TypeNew', bound=Any)
+NewCallableType = TypeVar('NewCallableType', bound=Optional[Callable])
+ReturnValueType = TypeVar('ReturnValueType', bound=Optional[Any])
+SideEffectType = TypeVar('SideEffectType', bound=Optional[Union[Callable, List]])
+AttrType = TypeVar('AttrType', bound=Union[Callable, str])
 
 
 __version__ = "1.0"
@@ -43,7 +46,7 @@ class MockerBuilderException(Exception):
     """ Exception in MockerBuilder usage or invocation"""
 
     def __repr__(self) -> str:
-        return "raised MockerBuilderException"
+        return "This is MockerBuilderException, ouieh!"
 
 
 class Patcher(Generic[_TP]):
@@ -53,17 +56,17 @@ class Patcher(Generic[_TP]):
 @dataclass
 class MockMetadata:
     mock_name: str
-    target: Tt = None
-    method: Tattr = None
-    attribute: Tattr = None
-    new: Tv = DEFAULT
+    target: TargetType = None
+    method: AttrType = None
+    attribute: AttrType = None
+    new: TypeNew = DEFAULT
     spec: bool = None
     create: bool = False
     spec_set: bool = None
     autospec: Union[bool, Callable] = None
-    new_callable: Callable = None
-    return_value: Tr = None
-    side_effect: Tse = None
+    new_callable: NewCallableType = None
+    return_value: ReturnValueType = None
+    side_effect: SideEffectType = None
     active: bool = True
     kwargs: Dict[str, Any] = field(default_factory={})
 
@@ -109,7 +112,7 @@ class MockerBuilderImpl:
         self._test_main_class = None
         self.load_args: list = None
 
-    def _register_test_main_class(self, t_main_class: Tk):
+    def _register_test_main_class(self, t_main_class: Callable):
         """_summary_
 
         Args:
@@ -153,21 +156,17 @@ class MockerBuilderImpl:
         # ipdb.set_trace()
         # TODO IS GONNA GET EASIER IF WE JUST VALIDATE AND PATCH AS STRING
         # PERHAPS WE'LL NEED TO TEST IF PATCH WORKS WITH MODULE/CLASS ATTRIBUTES MOCKING
-
-        # TODO should we check if target is a valid module? It may be a package!
         if inspect.isclass(target):
             if not _args:
                 return self._mocker.patch(
                     ".".join(self.load_args),
                     **_kwargs
                 )
-                # module, attr = self.load_args
-                # module = import_module(module)
-                # _patch_args = [module, attr]
             return self._mocker.patch.object(
                 *_patch_args,
                 **_kwargs
             )
+        # TODO should we check if target is a valid module? It may be a package!
         if inspect.ismodule(target):
             if not _args:
                 return self._mocker.patch(
@@ -178,18 +177,7 @@ class MockerBuilderImpl:
                 *_patch_args,
                 **_kwargs
             )
-        if inspect.isroutine(target) or inspect.isdatadescriptor(target):
-            # TODO Here we test if target may be a class attribute or module attr as global
-
-            # if len(target.__qualname__.split('.')) > 1:
-            #     # Here we know that target method come from a class
-            #     klass_path, attr = target.__qualname__.split('.')
-            #     module, klass = klass_path.split('.')
-            #     getattr(import_module(module), klass)
-
-            # path_attr = ".".join([target.__module__, target.__qualname__])
-            # path, attr = path_attr.rsplit('.', 1)
-            # module, klass = path.rsplit('.', 1)
+        if inspect.isroutine(target):
             target = ".".join([target.__module__, target.__qualname__])
             return self._mocker.patch(
                 target,
@@ -204,6 +192,12 @@ class MockerBuilderImpl:
         if isinstance(target, str):
             return self._mocker.patch(
                 *_patch_args,
+                **_kwargs
+            )
+        # TODO We must test using patch.multiple(...)
+        if isinstance(target, list):
+            return self._mocker.patch.multiple(
+                *[*_patch_args.pop(0), *_patch_args],
                 **_kwargs
             )
 
@@ -360,67 +354,19 @@ class MockerBuilderImpl:
 
     def _stop_mock(self, _mock: _MockType):
         for mock in self._mocker._patches:
-            if mock.get_original()[0]._extract_mock_name() == _mock._extract_mock_name():
+            if mock.get_original()[0] == _mock:
                 mock.stop()
+                print(f"Mock {_mock._extract_mock_name()} stopped...")
                 break
 
     def _start_mock(self, _mock: _MockType):
+        # TODO is not working, need to refactor
         for mock in self._mocker._patches:
-            if hasattr(mock.get_original()[0], '__name__'):
-                if mock.get_original()[0].__name__ == _mock._extract_mock_name():
-                    print("Mock started...")
-                    mock.start()
-                    # TODO We need to restore the _mock reference so we don't need to call
-                    # self.mocker_builder_start() again.
-                    _mock = mock.get_original()[0]  # this is not working
-                    break
-
-    ###########################################################################################
-    # TODO refactor to enable access mock methods asserts from our mocker-builder
-    # def configure_mock(self, **kwargs):
-    #     pass
-
-    # def assert_not_called(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_not_called
-
-    # def assert_called_with(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_called_with
-
-    # def assert_called_once(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_called_once
-
-    # def assert_called_once_with(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_called_once_with
-
-    # def assert_has_calls(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_has_calls
-
-    # def assert_any_call(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_any_call
-
-    # def assert_called(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_called
-
-    # def assert_not_awaited(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_not_awaited
-
-    # def assert_awaited_with(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_awaited_with
-
-    # def assert_awaited_once(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_awaited_once
-
-    # def assert_awaited_once_with(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_awaited_once_with
-
-    # def assert_has_awaits(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_has_awaits
-
-    # def assert_any_await(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_any_await
-
-    # def assert_awaited(self, *args: Any, **kwargs: Any) -> None:
-    #     return self._mocker.assert_awaited
+            # if hasattr(mock.get_original()[0], '__name__'):
+            if mock.get_original()[0] == _mock:
+                print(f"Mock {_mock} started...")
+                mock.start()
+                break
 
 
 class IMockerBuilder(ABC):
@@ -469,10 +415,12 @@ class IMockerBuilder(ABC):
     # TODO refactor the way we create and provide them
     # perhaps also for impl into this function alls fixtures and inject them instead always
     # call self.fixture_register(...)
+    # TODO make return a Fixture Type so we can use like: self.my_fixture = self.fixture_register
+    # perhaps change to add_fixture
     def fixture_register(
         self,
         name,
-        return_value: Optional[Tr] = None
+        return_value: ReturnValueType = None
     ):
         self.__fixtures.update({
             name: return_value
@@ -482,17 +430,17 @@ class IMockerBuilder(ABC):
     def add_mock(
         self,
         mock_name: str,
-        target: Tk,
-        method: Optional[Tattr] = None,
-        attribute: Optional[Tattr] = None,
-        new: Optional[Tv] = DEFAULT,
+        target: TargetType,
+        method: AttrType = None,
+        attribute: AttrType = None,
+        new: TypeNew = DEFAULT,
         spec: Optional[bool] = None,
         create: Optional[bool] = False,
         spec_set: Optional[bool] = None,
         autospec: Optional[Union[bool, Callable]] = None,
-        new_callable: Optional[Callable] = None,
-        return_value: Optional[Tr] = None,
-        side_effect: Optional[Tse] = None,
+        new_callable: NewCallableType = None,
+        return_value: ReturnValueType = None,
+        side_effect: SideEffectType = None,
         active: Optional[bool] = True,
         **kwargs
     ):
