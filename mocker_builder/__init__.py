@@ -1,5 +1,7 @@
-from mocker_builder.mocker_builder import IMockerBuilder as MockerBuilder
+from .mocker_builder import MockerBuilder
+from .mocker_builder import mocker_builder_initializer
 
 __all__ = [
-    "MockerBuilder"
+    "MockerBuilder",
+    "mocker_builder_initializer"
 ]

@@ -1,99 +1,82 @@
-# from __future__ import annotations
 # mocker_builder.py
-# Test tools for mocking and patching.
+# Test tools for mocking and patching based on pytest_mock mocker features.
 # Maintained by Tiago G Cunha
 # Backport for other versions of Python available from
 # https://pypi.org/project/mocker-builder
 
-
-from abc import ABC, abstractmethod
-import asyncio
+from __future__ import annotations
 from dataclasses import dataclass, field
 from importlib import import_module
+import inspect
 from types import ModuleType
 from typing import (
     Any, Callable, Dict, Generic, List, NewType, Optional, Tuple, TypeVar, Union
 )
-import inspect
-import warnings
-from unittest.mock import DEFAULT, MagicMock, _patch
+from unittest.mock import MagicMock, DEFAULT, _patch as Patch
+from pytest_mock import MockFixture
+from mock import AsyncMock
 import pytest
-from pytest_mock import MockerFixture
-from pytest_mock.plugin import AsyncMockType
-
-_MockType = TypeVar('_MockType', bound=Union[MagicMock, AsyncMockType])
-_TP = TypeVar('_TP', bound=_patch)  # or can be _MockType
-
+import warnings
+import asyncio
 
 MockType = NewType('MockType', MagicMock)
-_TMockType = TypeVar('_TMockType', bound=MockType)
+_TMockType = TypeVar('_TMockType', bound=Union[MockType, AsyncMock])
 TargetType = TypeVar('TargetType', Callable, ModuleType, str)
 TypeNew = TypeVar('TypeNew', bound=Any)
 NewCallableType = TypeVar('NewCallableType', bound=Optional[Callable])
 ReturnValueType = TypeVar('ReturnValueType', bound=Optional[Any])
 SideEffectType = TypeVar('SideEffectType', bound=Optional[Union[Callable, List]])
 AttrType = TypeVar('AttrType', bound=Union[Callable, str])
+MockMetadataType = TypeVar('MockMetadataType', bound=Dict[str, Any])
+FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
+PatchType = TypeVar('PatchType', bound=Patch)
 
 
-__version__ = "1.0"
-
-
-class MockerBuilderWarning(UserWarning):
+class MockerBuilderWarning:
     """Base class for all warnings emitted by mocker-builder."""
+
+    @staticmethod
+    def warn(message: str, *args):
+        msg = f"\033[93m{message}\033[0m"
+        warnings.warn(message=msg, category=UserWarning)
 
 
 class MockerBuilderException(Exception):
     """ Exception in MockerBuilder usage or invocation"""
 
-    def __repr__(self) -> str:
-        return "This is MockerBuilderException, ouieh!"
 
+@dataclass
+class TMockMetadata:
+    target_path: List = field(default_factory=lambda: [])
+    is_async: bool = False
+    patch_kwargs: Dict[str, Any] = field(default_factory=lambda: {})
+    _patch: PatchType = None
+    _mock: _TMockType = None
 
-class Patcher(Generic[_TP]):
-    pass
+    @property
+    def return_value(self) -> ReturnValueType:
+        return self.patch_kwargs.get('return_value')
+
+    @return_value.setter
+    def return_value(self, value: ReturnValueType):
+        self.patch_kwargs['return_value'] = value
+
+    @property
+    def configure_mock(self) -> MockMetadataType:
+        return self.patch_kwargs.get('configure_mock')
+
+    @configure_mock.setter
+    def configure_mock(self, data: MockMetadataType):
+        self.patch_kwargs['configure_mock'] = data
+
+    @property
+    def new(self) -> TypeNew:
+        return self.patch_kwargs.get('new')
 
 
 @dataclass
-class MockMetadata:
-    mock_name: str
-    target: TargetType = None
-    method: AttrType = None
-    attribute: AttrType = None
-    new: TypeNew = DEFAULT
-    spec: bool = None
-    create: bool = False
-    spec_set: bool = None
-    autospec: Union[bool, Callable] = None
-    new_callable: NewCallableType = None
-    return_value: ReturnValueType = None
-    side_effect: SideEffectType = None
-    active: bool = True
-    kwargs: Dict[str, Any] = field(default_factory={})
-
-    def unpack(self) -> Tuple:
-        return (
-            self.mock_name,
-            self.target,
-            self.method,
-            self.attribute,
-            self.return_value,
-            self.side_effect
-        )
-
-    def activate(self):
-        self.active = True
-
-    def deactivate(self):
-        self.active = False
-
-
-class MockerBuilderImpl:
-    """_summary_
-
-    Returns:
-        _type_: _description_
-    """
-    __mock_keys_validate = [
+class TMockMetadataBuilder:
+    __mock_keys_validate: List = field(default_factory=lambda: [
         'new',
         'spec',
         'create',
@@ -101,379 +84,249 @@ class MockerBuilderImpl:
         'autospec',
         'new_callable',
         'return_value',
-        'side_effect'
-    ]
+        'side_effect',
+        'configure_mock'
+    ])
 
-    def __init__(self, mocker: MockerFixture) -> None:
-        self._mocker = mocker
-        self._mocked_method: Dict[str, _MockType] = {}
-        self._mock_metadata: Dict[str, MockMetadata] = {}
-        self._current_mock: MockMetadata = None
-        self._test_main_class = None
-        self.load_args: list = None
-
-    def _register_test_main_class(self, t_main_class: Callable):
-        """_summary_
-
-        Args:
-            t_main_class (Tk): _description_
-        """
-        self._test_main_class = t_main_class
-
-    def _start(self):
-        self.__load_metadata()
-
-    def _mock_kwargs_builder(self, mock_metadata: MockMetadata) -> Dict[str, Any]:
-        """_summary_
-
-        Args:
-            mock_metadata (MockMetadata): _description_
-
-        Returns:
-            Dict[str, Any]: _description_
-        """
+    def __mock_kwargs_builder(self, mock_metadata: MockMetadataType) -> MockMetadataType:
         kwargs = {}
         for attr in self.__mock_keys_validate:
-            valeu = getattr(mock_metadata, attr)
+            valeu = mock_metadata.get(attr)
+            if attr == 'return_value':
+                kwargs.update({attr: valeu})
+                continue
             if valeu:
                 kwargs.update({attr: valeu})
         return kwargs
 
-    def __patcher(self, mock_metadata: MockMetadata) -> Patcher[_TP]:
-        """_summary_
+    def __unpack_params(self, mock_metadata: MockMetadataType) -> Tuple:
+        wanted_params = [
+            'target', 'method', 'attribute', 'return_value', 'side_effect'
+        ]
+        result = []
+        for param in wanted_params:
+            result.append(mock_metadata.get(param))
+        return tuple(result)
 
-        Args:
-            mock_metadata (MockMetadata): _description_
-
-        Returns:
-            Union[MagicMock, AsyncMockType]: _description_
-        """
-        _, target, method, attribute, *_ = mock_metadata.unpack()
-        _args = list(filter(None, [method if method else attribute]))
-        _kwargs = self._mock_kwargs_builder(mock_metadata)
-        _patch_args = [target, *_args]
-        # import ipdb
-        # ipdb.set_trace()
-        # TODO IS GONNA GET EASIER IF WE JUST VALIDATE AND PATCH AS STRING
-        # PERHAPS WE'LL NEED TO TEST IF PATCH WORKS WITH MODULE/CLASS ATTRIBUTES MOCKING
-        if inspect.isclass(target):
-            if not _args:
-                return self._mocker.patch(
-                    ".".join(self.load_args),
-                    **_kwargs
-                )
-            return self._mocker.patch.object(
-                *_patch_args,
-                **_kwargs
-            )
-        # TODO should we check if target is a valid module? It may be a package!
-        if inspect.ismodule(target):
-            if not _args:
-                return self._mocker.patch(
-                    *self.load_args,
-                    **_kwargs
-                )
-            return self._mocker.patch.object(
-                *_patch_args,
-                **_kwargs
-            )
-        if inspect.isroutine(target):
-            target = ".".join([target.__module__, target.__qualname__])
-            return self._mocker.patch(
-                target,
-                **_kwargs
-            )
-        # TODO Test with dicts
-        if isinstance(target, dict):
-            return self._mocker.patch.dict(
-                *_patch_args,
-                **_kwargs
-            )
-        if isinstance(target, str):
-            return self._mocker.patch(
-                *_patch_args,
-                **_kwargs
-            )
-        # TODO We must test using patch.multiple(...)
-        if isinstance(target, list):
-            return self._mocker.patch.multiple(
-                *[*_patch_args.pop(0), *_patch_args],
-                **_kwargs
-            )
-
-    def __load_safe_mock_param_path_from_module(self, path_attr: str):
-        """_summary_
-
-        Args:
-            path_attr (str): _description_
-
-        Returns:
-            _type_: _description_
-        """
-        # TODO: You should save state of the imported mock target so we can use it along
-        # the process flow
-        # import ipdb
-        # ipdb.set_trace()
-        path, attr = path_attr.rsplit('.', 1)
-        # if attr is '' so we know that our mock don't have attribute nor method kwargs setted.
-        # So we need to look if the mock came from a class or a module.
-        if not attr:
-            # Flow without attribute nor method setted.
-            # Here we know that klass may not be a class really and so we need to check if it's
-            # a method or an attribute that can come from a class or a module.
-            module, attr = path.rsplit('.', 1)
-            try:
-                if isinstance(import_module(module), ModuleType):
-                    # Here we know that module is really a module, ouieh!
-                    # TODO perhaps we will use that way
-                    # self._current_mock.target = getattr(import_module(module), attr)
-                    return getattr(import_module(module), attr)
-            except ModuleNotFoundError:
-                # Here we check if module actually is a class
-                try:
-                    module, klass = module.rsplit('.', 1)
-                    is_class = getattr(import_module(module), klass)
-                    if inspect.isclass(is_class):
-                        return getattr(is_class, attr)
-                except ModuleNotFoundError:
-                    # Here we don't know really what's coming!
-                    print("### Not identified from where method or attribute is coming from!")
-                    try:
-                        what_is_that = getattr(import_module(path), attr)
-                        what_is_this = getattr(import_module(module), klass)
-                        return what_is_that if attr else what_is_this
-                    except Exception as e:
-                        raise MockerBuilderException(e)
-        else:
-            # Flow with attribute or method setted
-            try:
-                if isinstance(import_module(path), ModuleType):
-                    # Here we now that module is really a module, ouieh!
-                    return getattr(import_module(path), attr)
-            except ModuleNotFoundError:
-                module, klass = path.rsplit('.', 1)
-                is_class = getattr(import_module(module), klass)
-                if inspect.isclass(is_class):
-                    return getattr(is_class, attr)
-
-    def __patch(
+    def __call__(
         self,
-        mock_metadata: MockMetadata
-    ):
-        """_summary_
-
-        Args:
-            mock_metadata (MockMetadata): _description_
-
-        Raises:
-            MockerBuilderException: _description_
-
-        Returns:
-            _type_: _description_
-        """
-        self._current_mock = mock_metadata
-        mock_name, target, method, attribute, return_value, side_effect = mock_metadata.unpack()
-
+        **kwargs
+    ) -> TMockMetadata:
+        target, method, attribute, return_value, side_effect = self.__unpack_params(kwargs)
         if return_value and side_effect:
-            warnings.warn(
-                "\033[93mDetected both return_value and side_effect keyword arguments passed to "
-                f"mocker {mock_name}. "
+            MockerBuilderWarning.warn(
+                " Detected both return_value and side_effect keyword arguments passed to "
+                f"mocker {target} "
                 "Be aware that side_effect cancels return_value, unless you define the return "
-                "of side_effect as DEFAULT, so have fun!\033[0m"
+                "of side_effect as DEFAULT, so have fun!"
             )
-
         if method and attribute:
             attribute = None
-            warnings.warn(
-                "\033[93mDetected both method and attr keyword arguments passed to "
-                f"mocker {mock_name}. Be aware that the method keyword sets a method mock and "
-                "the attr keyword sets an attribute mock. Method mock has priority and will be used"
-                ", so use it wiselly and have fun!\033[0m"
+            raise MockerBuilderException(
+                "Detected both method and attribute keyword arguments passed to "
+                f"mock {target}. Be aware that the method keyword sets a method mock and "
+                "the attribute keyword sets an attribute mock. You can not use both together. "
+                "So make your choice."
             )
         try:
+            attr = method if method else attribute if attribute else ''
             if inspect.isclass(target):
-                self.load_args = [target.__module__, target.__name__]
+                _target_path = (target.__module__, target.__name__, attr)
             elif inspect.isroutine(target):
-                self.load_args = [target.__module__, target.__qualname__]
+                try:
+                    klass, attr = target.__qualname__.rsplit('.', 1)
+                    _target_path = (target.__module__, klass, attr)
+                except ValueError:
+                    _target_path = (target.__module__, target.__name__)
             elif inspect.ismodule(target):
-                self.load_args = [target.__name__]
+                _target_path = (target.__name__, attr)
             elif isinstance(target, str):
-                self.load_args = [target]
+                module, module_or_klass, attr = target.rsplit('.', 2)
+                _target_path = (module, module_or_klass, attr)
             else:
-                warnings.warn(
-                    "###\033[93m target not identified so just dispatching as we received.\033[0m"
+                raise MockerBuilderException(
+                    "### target not identified so just aborting. Please check your parameters. ###"
                 )
-                self.load_args = [target]
-
-            mock_param_path = ".".join(
-                [*self.load_args, method if method else attribute if attribute else '']
-            )
+            mock_target_path = ".".join(_target_path)
             import re
-            safe_mock_param_path = re.sub(r'[^A-Za-z0-9_.]+', '', mock_param_path)
-            check_mock_param = self.__load_safe_mock_param_path_from_module(safe_mock_param_path)
-
-            if inspect.iscoroutinefunction(check_mock_param):
-                future = asyncio.Future()
-                future.set_result(return_value)
-                self._current_mock.return_value = future
+            safe_mock_target_path = re.sub(r'[^A-Za-z0-9_.]+', '', mock_target_path)
+            if safe_mock_target_path != mock_target_path:
+                raise MockerBuilderException(
+                    "Target path, method or attribute have not allowed caracters"
+                )
+            check_mock_target = self.__load_safe_mock_target_path_from_module(_target_path)
+            mock_metadata = TMockMetadata()
+            if inspect.iscoroutinefunction(check_mock_target):
+                mock_metadata.is_async = True
                 # TODO: Implementar return_value e/ou side_effect condicional Ex if result:...
                 # TODO testar usar side_effect com future...
 
-            self._mocked_method[mock_name] = self.__patcher(self._current_mock)
-            if self._current_mock.new == DEFAULT and self._current_mock.kwargs:
-                self._mocked_method[mock_name].configure_mock(**self._current_mock.kwargs)
-            # TODO We need to create a proper data structure to enable test_main_class
-            # to have autocomplete MagicMock params
-            setattr(self._test_main_class, mock_name, self._mocked_method[mock_name])
+            mock_metadata.target_path = mock_target_path
+            mock_metadata.patch_kwargs = self.__mock_kwargs_builder(kwargs)
+            return mock_metadata
         except Exception as ex:
             raise MockerBuilderException(ex)
 
-    def _add_mock(self, mock_metadata: MockMetadata):
-        """_summary_
+    def __load_safe_mock_target_path_from_module(self, safe_target_path: Tuple[str]):
+        try:
+            try:
+                module_path, klass_or_module, attr = safe_target_path
+            except ValueError:
+                module_path, attr = safe_target_path
+                module = import_module(module_path)
+                module_attr = getattr(module, attr)
+                if module_attr:
+                    return module_attr
+                return module
 
-        Args:
-            mock_metadata (MockMetadata): _description_
-        """
-        self._mock_metadata.update({
-            mock_metadata.mock_name: mock_metadata
-        })
+            module = import_module(module_path)
+            is_klass = getattr(module, klass_or_module)
+            if inspect.isclass(is_klass):
+                klass_attr = getattr(is_klass, attr)
+                if klass_attr:
+                    return klass_attr
+                return is_klass
+            is_module = getattr(module, klass_or_module)
+            if inspect.ismodule(is_module):
+                module_attr = getattr(is_module, attr)
+                if module_attr:
+                    return module_attr
+                return is_module
+        except Exception as ex:
+            raise MockerBuilderException(ex)
 
-    def __load_metadata(self):
-        """_summary_
-        """
-        for _, mock_metadata in self._mock_metadata.items():
-            if not mock_metadata.active:
-                continue
 
-            self.__patch(
-                mock_metadata
+class Patcher:
+    @staticmethod
+    def _asyncio_future(result) -> asyncio.Future:
+        future = asyncio.Future()
+        future.set_result(result)
+        return future
+
+    @staticmethod
+    def _patch(
+        mock_metadata: TMockMetadata
+    ) -> TMocker.TMockType:
+        if mock_metadata.is_async:
+            mock_metadata.return_value = Patcher._asyncio_future(mock_metadata.return_value)
+
+        _patch = TMocker._mocker.mock_module.patch(
+            mock_metadata.target_path,
+            **mock_metadata.patch_kwargs
+        )
+        _mocked = _patch.start()
+        # TODO Test if configure_mock is doing right
+        # if mock_metadata.new == DEFAULT and mock_metadata.configure_mock:
+        #     _mocked.configure_mock(**mock_metadata.configure_mock)
+
+        TMocker._mocker._patches.append(_patch)
+        mock_metadata._patch = _patch
+        mock_metadata._mock = _mocked
+        if hasattr(_mocked, "reset_mock"):
+            TMocker._mocker._mocks.append(_mocked)
+
+        _tmock = TMocker.TMockType(
+            mock_metadata
+        )
+        return _tmock
+
+
+class TMocker:
+    _mocker: MockFixture = None
+
+    @staticmethod
+    def add(
+        mock_metadata: TMockMetadata
+    ) -> TMocker.TMockType:
+        _mock = Patcher._patch(
+            mock_metadata
+        )
+        return _mock
+        ...
+
+    @dataclass
+    class _TMock(Generic[_TMockType]):
+        mock_metadata: TMockMetadata = None
+
+        def __call__(self) -> MockType:
+            return self.__get_mock()
+
+        def __get_mock(self) -> _TMockType:
+            return self.mock_metadata._mock
+
+        def set_result(self, result: ReturnValueType):
+            self.mock_metadata.return_value = result
+            _mock = Patcher._patch(
+                self.mock_metadata
             )
+            self.mock_metadata = _mock.mock_metadata
 
-    def _get_mock_metadata(self, mock_name: str) -> Union[MockMetadata, None]:
-        return self._mock_metadata.get(mock_name)
+        def start(self):
+            self.mock_metadata._mock = self.mock_metadata._patch.start()
+            print(f"Mock {self.__get_mock()} started...")
 
-    def _stop_mock(self, _mock: _MockType):
-        for mock in self._mocker._patches:
-            if mock.get_original()[0] == _mock:
-                mock.stop()
-                print(f"Mock {_mock._extract_mock_name()} stopped...")
-                break
+        def stop(self):
+            self.mock_metadata._patch.stop()
+            print(f"Mock {self.__get_mock()} stopped...")
 
-    def _start_mock(self, _mock: _MockType):
-        # TODO is not working, need to refactor
-        for mock in self._mocker._patches:
-            # if hasattr(mock.get_original()[0], '__name__'):
-            if mock.get_original()[0] == _mock:
-                print(f"Mock {_mock} started...")
-                mock.start()
-                break
+    TMockType = _TMock[_TMockType]
 
 
-class IMockerBuilder(ABC):
-    """_summary_
-
-    Args:
-        ABC (_type_): _description_
-
-    Returns:
-        _type_: _description_
-
-    Yields:
-        _type_: _description_
-    """
-    __mocker_builder: MockerBuilderImpl = None
-    __fixtures: Dict = {}
-    _mocker: MockerFixture = None  # TODO We need that?
-
-    def initializer(fnc):
-        @pytest.fixture(autouse=True)
-        def builder(test_main_class: IMockerBuilder, mocker):
-            """_summary_
-
-            Args:
-                test_main_class (IMockerBuilder): _description_
-                mocker (_type_): _description_
-
-            Yields:
-                _type_: _description_
-            """
-            print("\n#################### mocker_builder_create ##################")
-            test_main_class.__mocker_builder = MockerBuilderImpl(mocker)
-            test_main_class.__mocker_builder._register_test_main_class(test_main_class)
-            # TODO Perhaps it's good to enable the mocker to the TestMainClass
-            test_main_class._mocker = mocker
-            fnc(test_main_class)
-            yield test_main_class.mocker_builder_start()
-            del test_main_class.__mocker_builder
-            # TODO need to run gc.collect() or clean memory from here ?
-        return builder
-
-    @abstractmethod
-    def mocker_builder_initializer(self):
-        pass
-
-    # TODO refactor the way we create and provide them
-    # perhaps also for impl into this function alls fixtures and inject them instead always
-    # call self.fixture_register(...)
-    # TODO make return a Fixture Type so we can use like: self.my_fixture = self.fixture_register
-    # perhaps change to add_fixture
-    def fixture_register(
-        self,
-        name,
-        return_value: ReturnValueType = None
-    ):
-        self.__fixtures.update({
-            name: return_value
-        })
-        setattr(self, name, return_value)
+class MockerBuilder:
 
     def add_mock(
         self,
-        mock_name: str,
         target: TargetType,
         method: AttrType = None,
         attribute: AttrType = None,
         new: TypeNew = DEFAULT,
-        spec: Optional[bool] = None,
-        create: Optional[bool] = False,
-        spec_set: Optional[bool] = None,
-        autospec: Optional[Union[bool, Callable]] = None,
+        spec: bool = None,
+        create: bool = False,
+        spec_set: bool = None,
+        autospec: Union[bool, Callable] = None,
         new_callable: NewCallableType = None,
         return_value: ReturnValueType = None,
         side_effect: SideEffectType = None,
-        active: Optional[bool] = True,
-        **kwargs
-    ):
-        mock_metadata = MockMetadata(
-            mock_name=mock_name,
-            target=target,
-            method=method,
-            attribute=attribute,
-            new=new,
-            spec=spec,
-            create=create,
-            spec_set=spec_set,
-            autospec=autospec,
-            new_callable=new_callable,
-            return_value=return_value,
-            side_effect=side_effect,
-            active=active,
-            kwargs=kwargs if kwargs else None
-        )
-        self.__mocker_builder._add_mock(
-            mock_metadata=mock_metadata
+        is_async: bool = False,
+        configure_mock: MockMetadataType = None
+    ) -> TMocker.TMockType:
+        return TMocker.add(
+            TMockMetadataBuilder()(
+                target=target,
+                method=method,
+                attribute=attribute,
+                new=new,
+                spec=spec,
+                create=create,
+                spec_set=spec_set,
+                autospec=autospec,
+                new_callable=new_callable,
+                return_value=return_value,
+                side_effect=side_effect,
+                is_async=is_async,
+                configure_mock=configure_mock
+            )
         )
 
-    # TODO perhaps should we start ourselves mocker_builder instaed waiting call every test ?
-    def mocker_builder_start(self):
-        self.__mocker_builder._start()
+    def add_fixture(
+        self,
+        content: Any,
+        scope: str = "function"
+    ) -> FixtureType:
+        yield pytest.fixture(scope=scope)(content)
 
-    # TODO should we enable mock_metadata changes after initializer and start ?
-    def get_mock_metadata(self, mock_name: str) -> Union[MockMetadata, None]:
-        return self.__mocker_builder._get_mock_metadata(mock_name)
 
-    def stop_mock(self, _mock: _MockType):
-        self.__mocker_builder._stop_mock(_mock)
+def mocker_builder_initializer(fnc):
+    @pytest.fixture(autouse=True)
+    def builder(test_main_class, mocker: MockFixture):
+        """Decorator which inject a fixture to the TestClass method decorated with this
+        so we can get the mocker fixture injected to be used all spread on the tests.
 
-    def start_mock(self, _mock: _MockType):
-        self.__mocker_builder._start_mock(_mock)
+        Args:
+            test_main_class: The pytest main TestClass which runs all tests.
+            mocker: pytest-mock fixture to create patch and so on.
+        """
+        print("\n################## Mock Builder Initializer ##################")
+        TMocker._mocker = mocker
+        fnc(test_main_class)
+    return builder
