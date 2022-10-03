@@ -1,6 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any, Dict, List
 
 
 class IHero(ABC):
@@ -204,6 +205,37 @@ def initialize_other_hero():
     OTHER_HERO = FakeHero()
 
 
+class JusticeLeague:
+
+    def __init__(self) -> None:
+        self._heroes: List[IHero] = [
+            Batman(),
+            Robin()
+        ]
+
+    def add_hero(self, hero: IHero):
+        self._heroes.append(hero)
+
+    def show_heroes(self):
+        if self._heroes:
+            print(self._heroes)
+            return
+        print("Opss! No heroes over here!")
+
+    def what_heroes_does(self):
+        for hero in self._heroes:
+            print("===========================")
+            print(hero.nickname)
+            print(hero.eating_banana)
+            print(hero.wearing_pyjama)
+            print(hero.just_says)
+        else:
+            print("Eita! Here are no heroes in the moment!")
+
+    def call_heroes(self):
+        print("Hey every body come on!!!")
+
+
 __all__ = [
     "IHero",
     "FakeHero",
@@ -211,6 +243,7 @@ __all__ = [
     "Batman",
     "Robin",
     "MyHeroes",
+    "JusticeLeague",
     "THE_BEST_HERO",
     "OTHER_HERO",
     "who_is_my_hero",

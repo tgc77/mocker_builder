@@ -87,14 +87,17 @@ class TMockMetadataBuilder:
         'side_effect',
         'configure_mock'
     ])
+    __bypass_methods: List = field(default_factory=lambda: [
+        '__init__'
+    ])
 
     def __mock_kwargs_builder(self, mock_metadata: MockMetadataType) -> MockMetadataType:
         kwargs = {}
         for attr in self.__mock_keys_validate:
             valeu = mock_metadata.get(attr)
-            if attr == 'return_value':
-                kwargs.update({attr: valeu})
-                continue
+            # if attr == 'return_value':
+            #     kwargs.update({attr: valeu})
+            #     continue
             if valeu:
                 kwargs.update({attr: valeu})
         return kwargs
@@ -129,9 +132,9 @@ class TMockMetadataBuilder:
                 "So make your choice."
             )
         try:
-            attr = method if method else attribute if attribute else ''
+            attr = method if method else attribute if attribute else None
             if inspect.isclass(target):
-                _target_path = (target.__module__, target.__name__, attr)
+                _target_path = tuple(filter(None, [target.__module__, target.__name__, attr]))
             elif inspect.isroutine(target):
                 try:
                     klass, attr = target.__qualname__.rsplit('.', 1)
@@ -210,14 +213,17 @@ class Patcher:
         if mock_metadata.is_async:
             mock_metadata.return_value = Patcher._asyncio_future(mock_metadata.return_value)
 
+        _configure_mock = {}
+        if mock_metadata.configure_mock:
+            _configure_mock = mock_metadata.patch_kwargs.pop('configure_mock')
+
         _patch = TMocker._mocker.mock_module.patch(
             mock_metadata.target_path,
             **mock_metadata.patch_kwargs
         )
         _mocked = _patch.start()
-        # TODO Test if configure_mock is doing right
-        # if mock_metadata.new == DEFAULT and mock_metadata.configure_mock:
-        #     _mocked.configure_mock(**mock_metadata.configure_mock)
+        if mock_metadata.new == DEFAULT and _configure_mock:
+            _mocked.configure_mock(**_configure_mock)
 
         TMocker._mocker._patches.append(_patch)
         mock_metadata._patch = _patch
