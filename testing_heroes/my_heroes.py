@@ -1,6 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import List
 
 
 class IHero(ABC):
@@ -9,19 +10,19 @@ class IHero(ABC):
     nickname: str
 
     @abstractmethod
-    def eating_banana(self):
+    def eating_banana(self) -> str:
         pass
 
     @abstractmethod
-    def wearing_pyjama(self):
+    def wearing_pyjama(self) -> str:
         pass
 
     @abstractmethod
-    def just_call_for(self):
+    def just_call_for(self) -> str:
         pass
 
     @abstractmethod
-    def just_says(self):
+    def just_says(self) -> str:
         pass
 
 
@@ -158,7 +159,7 @@ class MyHeroes:
     def who_is_my_hero(self):
         print(f"""
         {self._my_hero.__class__.__name__} is my hero because {self.is_eating_banana()},
-        {self.is_wearing_pyjama()}, {self.just_call_for()} and just says: 
+        {self.is_wearing_pyjama()}, {self.just_call_for()} and just says:
         {self.just_says()}
         """)
 
@@ -204,6 +205,39 @@ def initialize_other_hero():
     OTHER_HERO = FakeHero()
 
 
+class JusticeLeague:
+
+    def __init__(self) -> None:
+        self._heroes: List[IHero] = [
+            Batman(),
+            Robin()
+        ]
+
+    def add_hero(self, hero: IHero):
+        self._heroes.append(hero)
+
+    def show_heroes(self):
+        if hasattr(self, '_heroes'):
+            for hero in self._heroes:
+                print(hero.just_call_for())
+            return
+        return "Opss! No heroes over here!"
+
+    def what_heroes_does(self):
+        if hasattr(self, '_heroes'):
+            for hero in self._heroes:
+                print("===========================")
+                print(hero.nickname)
+                print(hero.eating_banana())
+                print(hero.wearing_pyjama())
+                print(hero.just_says())
+        else:
+            return "Eita! Heroes are doing nothing!"
+
+    def call_heroes(self):
+        print("Hey every body come on!!!")
+
+
 __all__ = [
     "IHero",
     "FakeHero",
@@ -211,6 +245,7 @@ __all__ = [
     "Batman",
     "Robin",
     "MyHeroes",
+    "JusticeLeague",
     "THE_BEST_HERO",
     "OTHER_HERO",
     "who_is_my_hero",

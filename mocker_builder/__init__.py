@@ -1,4 +1,6 @@
-from mocker_builder.mocker_builder import IMockerBuilder as MockerBuilder
+from .mocker_builder import MockerBuilder
+
+__version__ = "1.0.0"
 
 __all__ = [
     "MockerBuilder"
