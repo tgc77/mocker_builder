@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import List
 
 
 class IHero(ABC):
@@ -10,19 +10,19 @@ class IHero(ABC):
     nickname: str
 
     @abstractmethod
-    def eating_banana(self):
+    def eating_banana(self) -> str:
         pass
 
     @abstractmethod
-    def wearing_pyjama(self):
+    def wearing_pyjama(self) -> str:
         pass
 
     @abstractmethod
-    def just_call_for(self):
+    def just_call_for(self) -> str:
         pass
 
     @abstractmethod
-    def just_says(self):
+    def just_says(self) -> str:
         pass
 
 
@@ -159,7 +159,7 @@ class MyHeroes:
     def who_is_my_hero(self):
         print(f"""
         {self._my_hero.__class__.__name__} is my hero because {self.is_eating_banana()},
-        {self.is_wearing_pyjama()}, {self.just_call_for()} and just says: 
+        {self.is_wearing_pyjama()}, {self.just_call_for()} and just says:
         {self.just_says()}
         """)
 
@@ -217,20 +217,22 @@ class JusticeLeague:
         self._heroes.append(hero)
 
     def show_heroes(self):
-        if self._heroes:
-            print(self._heroes)
+        if hasattr(self, '_heroes'):
+            for hero in self._heroes:
+                print(hero.just_call_for())
             return
-        print("Opss! No heroes over here!")
+        return "Opss! No heroes over here!"
 
     def what_heroes_does(self):
-        for hero in self._heroes:
-            print("===========================")
-            print(hero.nickname)
-            print(hero.eating_banana)
-            print(hero.wearing_pyjama)
-            print(hero.just_says)
+        if hasattr(self, '_heroes'):
+            for hero in self._heroes:
+                print("===========================")
+                print(hero.nickname)
+                print(hero.eating_banana())
+                print(hero.wearing_pyjama())
+                print(hero.just_says())
         else:
-            print("Eita! Here are no heroes in the moment!")
+            return "Eita! Heroes are doing nothing!"
 
     def call_heroes(self):
         print("Hey every body come on!!!")

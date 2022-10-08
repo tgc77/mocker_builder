@@ -1,7 +1,7 @@
 from .mocker_builder import MockerBuilder
-from .mocker_builder import mocker_builder_initializer
+
+__version__ = "1.0.0"
 
 __all__ = [
-    "MockerBuilder",
-    "mocker_builder_initializer"
+    "MockerBuilder"
 ]
