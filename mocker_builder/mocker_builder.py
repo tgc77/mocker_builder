@@ -47,9 +47,11 @@ MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 PatchType = TypeVar('PatchType', bound=Patch)
 
+__version__ = "0.1.0"
+
 
 class MockerBuilderWarning:
-    """Base class for all warnings emitted by mocker-builder."""
+    """Base class for all warnings emitted by mocker-builder"""
 
     @staticmethod
     def warn(message: str, *args):
@@ -58,20 +60,33 @@ class MockerBuilderWarning:
 
 
 class MockerBuilderException(Exception):
-    """ Exception in MockerBuilder usage or invocation"""
-
-    def __init__(self, *args: object) -> None:
-        import ipdb
-        ipdb.set_trace()
-        # TODO set text to RED
-        super().__init__(*args)
+    """Exception in MockerBuilder usage or invocation"""
 
 
 @dataclass
 class TMockMetadata:
+    """Mock metadata structure to keep state of created mock and patcher for easily reset mock
+    return value and so on.
+
+    Args:
+        target_path (str): Keep converted mock patch target and attribute users enter as class 
+        method or attribute or even module methods or attributes so we can just patch them.
+
+        is_async: (bool): Identify if method to be mocked is async or not.
+
+        patch_kwargs: (MockMetadataKwargsType): Here we just dispatch kwargs mock parameters such as
+        return_value, side_effect, spec, new_callable, configure_mock and so on.
+
+        _patch: (PatchType): Mocker patch wrapper to create and start mocks.
+
+        _mock: (_TMockType): Mock instance keeper.
+
+        is_active: (bool): Flag to sinalize that mock is active.
+        (We really don't know how gonna use that yet, hehe!)
+    """
     target_path: str = None
     is_async: bool = False
-    patch_kwargs: Dict[str, Any] = field(default_factory=lambda: {})
+    patch_kwargs: MockMetadataKwargsType = field(default_factory=lambda: {})
     _patch: PatchType = None
     _mock: _TMockType = None
     is_active: bool = False  # TODO we need to work on when patch.stop() called
@@ -106,6 +121,11 @@ class TMockMetadata:
 
 
 class Patcher:
+    """Patch wrapper for the mocker.patch feature.
+
+    Args:
+        _mocker (MockFixture): mocker fixture keeper.
+    """
     _mocker: MockFixture = None
 
     @staticmethod
@@ -118,6 +138,15 @@ class Patcher:
     def _patch(
         mock_metadata: TMockMetadata
     ) -> TMocker.TMockType:
+        """Our mock patch to properly identify and setting mock properties. We start the mock so
+        we can manage state when stopping and restarting mocks.
+
+        Args:
+            mock_metadata (TMockMetadata): Mock metadata instance with mock's data.
+
+        Returns:
+            TMocker.TMockType: Our Mock Type wrapper.
+        """
         if mock_metadata.is_async:
             mock_metadata.return_value = Patcher._asyncio_future(mock_metadata.return_value)
 
@@ -148,8 +177,22 @@ class Patcher:
 
 @dataclass
 class TMockMetadataBuilder:
+    """Here we build our mock metada to parse mock parameters and propagate state.
+
+    Args:
+        _mock_metadata (TMockMetadata): Mock metadata instance to propagate mock state.
+
+        __mock_keys_validate (List[str]): Mock parameters we need to check if were setted to 
+        dispatch to mock.patch creation.
+
+        __bypass_methods (List[str]): Methods we need keeping properly behavior for return value.
+
+    Raises:
+        MockerBuilderException: Notify users when we found in trouble.
+
+    """
     _mock_metadata: TMockMetadata = None
-    __mock_keys_validate: List = field(default_factory=lambda: [
+    __mock_keys_validate: List[str] = field(default_factory=lambda: [
         'new',
         'spec',
         'create',
@@ -160,14 +203,14 @@ class TMockMetadataBuilder:
         'side_effect',
         'configure_mock'
     ])
-    __bypass_methods: List = field(default_factory=lambda: [
+    __bypass_methods: List[str] = field(default_factory=lambda: [
         '__init__'
     ])
 
     def __mock_kwargs_builder(
         self,
         mock_metadata_kwargs: MockMetadataKwargsType
-    ) -> MockMetadataKwargsType:
+    ):
         kwargs = {}
         for attr in self.__mock_keys_validate:
             valeu = mock_metadata_kwargs.get(attr)
@@ -192,6 +235,14 @@ class TMockMetadataBuilder:
         self,
         **kwargs
     ) -> TMockMetadata:
+        """Mock metadata builder by parsing mock parameters and setting our mock_metadata instance.
+
+        Raises:
+            MockerBuilderException: Notify users when we found in trouble.
+
+        Returns:
+            TMockMetadata: Mock metadata to keep mock and patch state and creation.
+        """
         target, method, attribute, return_value, side_effect = self.__unpack_params(kwargs)
         if return_value and side_effect:
             MockerBuilderWarning.warn(
@@ -208,6 +259,9 @@ class TMockMetadataBuilder:
                 "So make your choice."
             )
         try:
+            # Here we need to parse the target parameter to identify the type and spliting by
+            # package/module, module, class and method or attribute we are going to mock converting
+            # the path to string.
             attr = method if method else attribute if attribute else None
             if inspect.isclass(target):
                 _target_path = tuple(filter(None, [target.__module__, target.__name__, attr]))
@@ -253,6 +307,8 @@ class TMockMetadataBuilder:
             raise MockerBuilderException(ex)
 
     def __load_safe_mock_target_path_from_module(self, safe_target_path: Tuple[str]):
+        # Here we just validate if our parsed target args are importable to be able to check in
+        # the future if a method is async or not.
         try:
             try:
                 module_path, klass_or_module, attr = safe_target_path
@@ -282,6 +338,7 @@ class TMockMetadataBuilder:
 
 
 class TMocker:
+    """Our inteface to connect mock metadata builder to the user building tests"""
 
     @staticmethod
     def add(
@@ -294,6 +351,13 @@ class TMocker:
 
     @dataclass
     class _TMock(Generic[_TMockType]):
+        """Our especialized Mock to handle with MagicMock or AsyncMock types.
+
+        Args:
+            Generic (_TMockType): Mock type we give back to user's tests.
+
+            mock_metadata (TMockMetadata): Mock metadata instance given from MockMetadata Builder.
+        """
         mock_metadata: TMockMetadata = None
 
         def __call__(self) -> MockType:

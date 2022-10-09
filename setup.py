@@ -33,7 +33,8 @@ setup(
     install_requires=[
         'asyncio',
         'pytest',
-        'pytest_mock'
+        'pytest_mock',
+        'mock'
     ],
     setup_requires=['pytest-runner'],
     tests_require=[
