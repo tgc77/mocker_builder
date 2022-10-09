@@ -31,10 +31,8 @@ setup(
     packages=find_packages(include=['mocker_builder']),
     include_package_data=True,
     install_requires=[
-        'asyncio',
         'pytest',
-        'pytest_mock',
-        'mock'
+        'pytest_mock'
     ],
     setup_requires=['pytest-runner'],
     tests_require=[
