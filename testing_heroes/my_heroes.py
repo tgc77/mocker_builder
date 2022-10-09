@@ -131,11 +131,6 @@ class OtherHero(IHero):
 class MyHeroes:
     _my_hero: IHero = None
 
-    # def __call__(self, my_hero: IHero) -> MyHeroes:
-    #     self._my_hero = my_hero
-    #     self.hero_name = self._my_hero.__class__.__name__
-    #     return self
-
     @property
     def my_hero(self):
         return self._my_hero

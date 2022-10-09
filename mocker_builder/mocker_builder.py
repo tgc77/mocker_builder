@@ -30,13 +30,13 @@ from unittest.mock import (
     _patch as Patch,
 )
 from pytest_mock import MockFixture
-from mock import AsyncMock
+from pytest_mock.plugin import AsyncMockType
 import pytest
 import warnings
 import asyncio
 
 MockType = NewType('MockType', MagicMock)
-_TMockType = TypeVar('_TMockType', bound=Union[MockType, AsyncMock])
+_TMockType = TypeVar('_TMockType', bound=Union[MockType, AsyncMockType])
 TargetType = TypeVar('TargetType', Callable, ModuleType, str)
 TypeNew = TypeVar('TypeNew', bound=Any)
 NewCallableType = TypeVar('NewCallableType', bound=Optional[Callable])
@@ -338,7 +338,7 @@ class TMockMetadataBuilder:
 
 
 class TMocker:
-    """Our inteface to connect mock metadata builder to the user building tests"""
+    """Our interface to handle mock features"""
 
     @staticmethod
     def add(
@@ -351,7 +351,7 @@ class TMocker:
 
     @dataclass
     class _TMock(Generic[_TMockType]):
-        """Our especialized Mock to handle with MagicMock or AsyncMock types.
+        """Our specialized Mock to handle with MagicMock or AsyncMock types.
 
         Args:
             Generic (_TMockType): Mock type we give back to user's tests.
@@ -388,6 +388,7 @@ TFixtureContentType = TypeVar('TFixtureContentType')
 
 
 class MockerBuilder(ABC):
+    """Our interface to connect mock metadata builder to the user's building tests"""
 
     def initializer(fnc):
         @pytest.fixture(autouse=True)
