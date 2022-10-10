@@ -214,7 +214,10 @@ class JusticeLeague:
     def show_heroes(self):
         if hasattr(self, '_heroes'):
             for hero in self._heroes:
-                print(hero.just_call_for())
+                print(
+                    hero.__class__.__name__,
+                    hero.just_call_for()
+                )
             return
         return "Opss! No heroes over here!"
 

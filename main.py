@@ -29,11 +29,10 @@ class TestMyHeroes(MockerBuilder):
         self.mock_my_heroes_class = self.add_mock(
             target=MyHeroes
         )
-
         self.mock_my_heroes_module = self.add_mock(
             target=my_heroes.initialize_other_hero
         )
-        self.mock_my_hero = self.add_mock(
+        self.mock_my_hero_attribue = self.add_mock(
             target=MyHeroes,
             attribute='_my_hero',
             configure_mock={
@@ -41,7 +40,7 @@ class TestMyHeroes(MockerBuilder):
                 'just_says.side_effect': ["Nothing to say!"]
             }
         )
-        self.mock_my_class = self.add_mock(
+        self.mock_other_hero = self.add_mock(
             target=OtherHero,
             configure_mock={
                 'return_value.just_says.return_value': "He feels good!"
@@ -50,6 +49,7 @@ class TestMyHeroes(MockerBuilder):
         self.mock_who_is_my_hero = self.add_mock(
             target=Batman,
             configure_mock={
+                'return_value.nickname': 'Bat Mock',
                 'return_value.eating_banana.return_value': "doesn't like banana",
                 'return_value.wearing_pyjama.return_value': "doesn't wear pyjama",
                 'return_value.just_call_for.return_value': "Just calls for Mocker",
@@ -83,22 +83,22 @@ class TestMyHeroes(MockerBuilder):
         my_heroes.who_is_the_best_hero()
         assert self.mock_my_heroes_module().called
 
-    def test_my_hero(self):
-        assert self.mock_my_hero().eating_banana() == "Banana Noooo!"
-        assert self.mock_my_hero().just_says() == "Nothing to say!"
+    def test_mock_my_hero_attribute(self):
+        assert self.mock_my_hero_attribue().eating_banana() == "Banana Noooo!"
+        assert self.mock_my_hero_attribue().just_says() == "Nothing to say!"
 
-    def test_my_class(self):
+    def test_mock_my_class(self):
         response = my_heroes.asks_what_other_hero_have_to_say_about_been_hero()
         assert response == "He feels good!"
 
-    def test_who_is_my_hero(self):
+    def test_mock_who_is_my_hero(self):
         my_heroes.who_is_my_hero(Batman())
 
         testing = MyHeroes()
         testing.my_hero = my_heroes.Batman()
         testing.who_is_my_hero()
 
-    def test_justice_league_call_heroes(self):
+    def test_mock_justice_league__init__(self):
         justce_league = JusticeLeague()
 
         assert justce_league.show_heroes() == "Opss! No heroes over here!"
@@ -107,8 +107,28 @@ class TestMyHeroes(MockerBuilder):
         self.mock_justice_league.stop()
 
         justce_league = JusticeLeague()
+
+        self.mock_test_io = self.add_mock(
+            target='sys.stdout',
+            new_callable=StringIO
+        )
         justce_league.show_heroes()
+        expected = """MagicMock Just calls for Mocker
+Robin just calls for Little Bastard\n"""
+        assert self.mock_test_io().getvalue() == expected
+
         justce_league.what_heroes_does()
+        expected += """===========================
+Bat Mock
+doesn't like banana
+doesn't wear pyjama
+I'm gonna mock you babe!
+===========================
+Little Bastard
+is eating 1 banana(s)
+is wearing 4 pyjama(s)
+I'm gonna have a pint!\n"""
+        assert self.mock_test_io().getvalue() == expected
 
         self.mock_justice_league.start()
 
