@@ -38,11 +38,11 @@ import asyncio
 MockType = NewType('MockType', MagicMock)
 _TMockType = TypeVar('_TMockType', bound=Union[MockType, AsyncMockType])
 TargetType = TypeVar('TargetType', Callable, ModuleType, str)
+AttrType = TypeVar('AttrType', bound=str)
 TypeNew = TypeVar('TypeNew', bound=Any)
 NewCallableType = TypeVar('NewCallableType', bound=Optional[Callable])
 ReturnValueType = TypeVar('ReturnValueType', bound=Optional[Any])
 SideEffectType = TypeVar('SideEffectType', bound=Optional[Union[Callable, List]])
-AttrType = TypeVar('AttrType', bound=Union[Callable, str])
 MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 PatchType = TypeVar('PatchType', bound=Patch)
@@ -433,6 +433,81 @@ class MockerBuilder(ABC):
         is_async: bool = False,
         configure_mock: MockMetadataKwargsType = None
     ) -> TMocker.TMockType:
+        """From here we create new mock.patch parsing the :param target parameter. You can just set your
+        target as normal imported class, module or method. You don't need to pass it as string like
+        normal mock.patch does. Here we make it easier by just allowing to set the :param target parameter
+        for classes, modules and methods or functions without the need of setting the :param method 
+        parameter. Just if you wanna mock an attribute you must set it from the :param attribute
+        parameter as string. The target can be am imported class or module but the attribute need 
+        to be passed as string:
+
+            from testing_heroes.my_heroes import MyHeroes
+
+            class TestMyHeroes(MockerBuilder):
+
+                @MockerBuilder.initializer
+                def mocker_builder_setup(self):
+
+                    self.mock_my_hero_attribute = self.add_mock(
+                        target=MyHeroes,
+                        attribute='_my_hero',
+                        configure_mock={
+                            'eating_banana.return_value': "Banana Noooo!",
+                            'just_says.side_effect': ["Nothing to say!"]
+                        }
+                    )
+
+                def test_my_hero_attribute(self):
+                    assert self.mock_my_hero_attribue().eating_banana() == "Banana Noooo!"
+                    assert self.mock_my_hero_attribue().just_says() == "Nothing to say!"
+
+        Types description:
+            TargetType = TypeVar('TargetType', Callable, ModuleType, str)
+            AttrType = TypeVar('AttrType', bound=Union[Callable, str])
+            TypeNew = TypeVar('TypeNew', bound=Any)
+            NewCallableType = TypeVar('NewCallableType', bound=Optional[Callable])
+            ReturnValueType = TypeVar('ReturnValueType', bound=Optional[Any])
+            SideEffectType = TypeVar('SideEffectType', bound=Optional[Union[Callable, List]])
+
+        Args:
+            target (TargetType): The target to be mocked.
+
+            method (AttrType[str], optional): Method to be mocked, useful when need to create
+                an method or dynamically invoking. Defaults to None.
+
+            attribute (AttrType[str], optional): Attribute to be mocked. Defaults to None.
+
+            new (TypeNew, optional): The new type that target.attibute
+                will get after mocking. Defaults to DEFAULT.
+                Ex: ... self.add_mock(
+                    target=MyClass,
+                    attribute='my_class_attr',
+                    new=PropertyMock(OtherClass) # A Mock with spec of OtherClass.
+                        or
+                    new=OtherClass # A real class, not a mock.
+                )
+
+            spec (bool, optional): _description_. Defaults to None.
+
+            create (bool, optional): _description_. Defaults to False.
+
+            spec_set (bool, optional): _description_. Defaults to None.
+
+            autospec (Union[bool, Callable], optional): _description_. Defaults to None.
+
+            new_callable (NewCallableType, optional): _description_. Defaults to None.
+
+            return_value (ReturnValueType, optional): _description_. Defaults to None.
+
+            side_effect (SideEffectType, optional): _description_. Defaults to None.
+
+            is_async (bool, optional): _description_. Defaults to False.
+
+            configure_mock (MockMetadataKwargsType, optional): _description_. Defaults to None.
+
+        Returns:
+            TMocker.TMockType: _description_
+        """
         return TMocker.add(
             TMockMetadataBuilder()(
                 target=target,
