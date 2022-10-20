@@ -27,7 +27,7 @@ from typing import (
 from unittest.mock import (
     MagicMock,
     DEFAULT,
-    _patch as Patch,
+    _patch as _PatchType,
 )
 from pytest_mock import MockFixture
 from pytest_mock.plugin import AsyncMockType
@@ -44,7 +44,7 @@ ReturnValueType = TypeVar('ReturnValueType', bound=Optional[Any])
 SideEffectType = TypeVar('SideEffectType', bound=Optional[Union[Callable, List]])
 MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
-PatchType = TypeVar('PatchType', bound=Patch)
+_Patch = TypeVar('_Patch', bound=_PatchType)
 
 __version__ = "0.1.0"
 
@@ -76,7 +76,7 @@ class TMockMetadata:
         patch_kwargs: (MockMetadataKwargsType): Here we just dispatch kwargs mock parameters such as
         return_value, side_effect, spec, new_callable, mock_configure and so on.
 
-        _patch: (PatchType): Mocker patch wrapper to create and start mocks.
+        _patch: (_Patch): Mocker _patch wrapper to the mock.patch features.
 
         _mock: (_TMockType): Mock instance keeper.
 
@@ -86,7 +86,7 @@ class TMockMetadata:
     target_path: str = None
     is_async: bool = False
     patch_kwargs: MockMetadataKwargsType = field(default_factory=lambda: {})
-    _patch: PatchType = None
+    _patch: _Patch = None
     _mock: _TMockType = None
     is_active: bool = False
 
@@ -118,6 +118,10 @@ class TMockMetadata:
     def new(self) -> TypeNew:
         return self.patch_kwargs.get('new')
 
+    @property
+    def create(self) -> bool:
+        return self.patch_kwargs.get('create')
+
 
 try:
     import asyncio
@@ -142,9 +146,9 @@ class Patcher:
     _mocked_metadata: List[TMockMetadata] = []
 
     @staticmethod
-    def _patch(
+    def dispatch(
         mock_metadata: TMockMetadata
-    ) -> TMocker.TMockType:
+    ) -> TMocker.PatchType:
         """Our mock patch to properly identify and setting mock properties. We start the mock so
         we can manage state when stopping and restarting mocks.
 
@@ -152,7 +156,7 @@ class Patcher:
             mock_metadata (TMockMetadata): Mock metadata instance with mock's data.
 
         Returns:
-            TMocker.TMockType: Our Mock Type wrapper.
+            TMocker.PatchType: Our Mock Patch Type wrapper.
         """
         if mock_metadata.is_async:
             mock_metadata.return_value = _asyncio_future(mock_metadata.return_value)
@@ -171,16 +175,23 @@ class Patcher:
         if hasattr(_mocked, "reset_mock"):
             Patcher._mocker._mocks.append(_mocked)
 
-        _tmock = TMocker.TMockType(
+        _tmock_patch = TMocker.PatchType(
             mock_metadata
         )
-        return _tmock
+        return _tmock_patch
 
     @staticmethod
     def _clean_up():
+        print("\n######################## cleaning up ########################")
         for mock_metadata in Patcher._mocked_metadata:
             if not mock_metadata.is_active:
-                Patcher._mocker._patches.remove(mock_metadata._patch)
+                try:
+                    print("### Removing: ", mock_metadata._patch)
+                    Patcher._mocker._patches.remove(mock_metadata._patch)
+                except ValueError:
+                    print("Opss!", mock_metadata._patch, "Not found!")
+                    pass
+        del Patcher._mocked_metadata[:]
 
 
 @dataclass
@@ -277,7 +288,14 @@ class TMockMetadataBuilder:
             # the path to string.
             attr = method if method else attribute if attribute else None
             if inspect.isclass(target):
-                _target_path = tuple(filter(None, [target.__module__, target.__name__, attr]))
+                # TODO we will check if need that
+                # if not attr:
+                #     attr = '__init__'
+                _target_path = tuple(filter(None, [
+                    target.__module__,
+                    target.__name__,
+                    attr
+                ]))
             elif inspect.isroutine(target):
                 try:
                     klass, attr = target.__qualname__.rsplit('.', 1)
@@ -293,8 +311,12 @@ class TMockMetadataBuilder:
                 except ValueError:
                     module, attr = target.rsplit('.', 1)
                     _target_path = (module, attr)
-            # elif isinstance(target, object): #TODO We will work on this feature soon...
-            #     ...
+            elif isinstance(target, object):
+                _target_path = tuple(filter(None, [
+                    target.__module__,
+                    type(target).__name__,
+                    attr
+                ]))
             else:
                 raise MockerBuilderException(
                     "### Mock target not identified so just aborting. "
@@ -307,16 +329,16 @@ class TMockMetadataBuilder:
                 raise MockerBuilderException(
                     "Target path, method or attribute have not allowed caracters"
                 )
-            check_mock_target = self.__load_safe_mock_target_path_from_module(_target_path)
             self._mock_metadata = TMockMetadata()
-            if inspect.iscoroutinefunction(check_mock_target):
-                self._mock_metadata.is_async = True
-                # TODO: Implementar return_value e/ou side_effect condicional Ex if result:...
-                # TODO testar usar side_effect com future...
-
             self._mock_metadata.target_path = mock_target_path
             self.__mock_kwargs_builder(kwargs)
             self.__apply_bypass_methods_return_value()
+            check_mock_target = self.__load_safe_mock_target_path_from_module(_target_path)
+            if inspect.iscoroutinefunction(check_mock_target):
+                self._mock_metadata.is_async = True
+                # TODO: Dev return_value and/or side_effect condicional Ex if result:... else: ...
+                # TODO  also test using side_effect with asyncio.Future
+
             return self._mock_metadata
         except Exception as ex:
             raise MockerBuilderException(ex)
@@ -330,24 +352,40 @@ class TMockMetadataBuilder:
             except ValueError:
                 module_path, attr = safe_target_path
                 module = import_module(module_path)
-                module_attr = getattr(module, attr)
-                if module_attr:
-                    return module_attr
-                return module
+                try:
+                    module_attr = getattr(module, attr)
+                    if module_attr:
+                        return module_attr
+                    return module
+                except AttributeError as ex:
+                    if self._mock_metadata.create:
+                        return module
+                    raise MockerBuilderException(ex)
 
             module = import_module(module_path)
             is_klass = getattr(module, klass_or_module)
             if inspect.isclass(is_klass):
-                klass_attr = getattr(is_klass, attr)
-                if klass_attr:
-                    return klass_attr
-                return is_klass
+                try:
+                    klass_attr = getattr(is_klass, attr)
+                    if klass_attr:
+                        return klass_attr
+                    return is_klass
+                except AttributeError as ex:
+                    if self._mock_metadata.create:
+                        return is_klass
+                    raise MockerBuilderException(ex)
+
             is_module = getattr(module, klass_or_module)
             if inspect.ismodule(is_module):
-                module_attr = getattr(is_module, attr)
-                if module_attr:
-                    return module_attr
-                return is_module
+                try:
+                    module_attr = getattr(is_module, attr)
+                    if module_attr:
+                        return module_attr
+                    return is_module
+                except AttributeError as ex:
+                    if self._mock_metadata.create:
+                        return is_module
+                    raise MockerBuilderException(ex)
         except Exception as ex:
             raise MockerBuilderException(ex)
 
@@ -356,16 +394,16 @@ class TMocker:
     """Our interface to handle mock features"""
 
     @staticmethod
-    def add(
+    def _patch(
         mock_metadata: TMockMetadata
-    ) -> TMocker.TMockType:
-        _mock = Patcher._patch(
+    ) -> TMocker.PatchType:
+        _mock = Patcher.dispatch(
             mock_metadata
         )
         return _mock
 
     @dataclass
-    class _TMock(Generic[_TMockType]):
+    class _TPatch(Generic[_TMockType]):
         """Our specialized Mock to handle with MagicMock or AsyncMock types.
 
         Args:
@@ -382,12 +420,18 @@ class TMocker:
         def __call__(self) -> MockType:
             return self.__get_mock()
 
+        def __enter__(self) -> MockType:
+            return self.__get_mock()
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
         def __get_mock(self) -> _TMockType:
             return self.mock_metadata._mock
 
         def set_result(self, result: ReturnValueType):
             self.mock_metadata.return_value = result
-            _mock = Patcher._patch(
+            _mock = Patcher.dispatch(
                 self.mock_metadata
             )
             self.mock_metadata = _mock.mock_metadata
@@ -402,7 +446,7 @@ class TMocker:
             self.mock_metadata.is_active = False
             print(f"Mock {self.__get_mock()} stopped...")
 
-    TMockType = _TMock[_TMockType]
+    PatchType = _TPatch[_TMockType]
 
 
 TFixtureContentType = TypeVar('TFixtureContentType')
@@ -424,6 +468,7 @@ class MockerBuilder(ABC):
             print("\n################# Mocker Builder Initializer ################")
             Patcher._mocker = mocker
             yield fnc(test_main_class)
+
             # Cleaning up stopped mocks: mock_metadata.is_active = False to avoid raising
             # mocker RuntimeError: "stop called on unstarted patcher".
             Patcher._clean_up()
@@ -441,7 +486,7 @@ class MockerBuilder(ABC):
         """
         pass
 
-    def add_mock(
+    def patch(
         self,
         target: TargetType,
         method: AttrType = None,
@@ -456,7 +501,7 @@ class MockerBuilder(ABC):
         side_effect: SideEffectType = None,
         mock_configure: MockMetadataKwargsType = None,
         **kwargs
-    ) -> TMocker.TMockType:
+    ) -> TMocker.PatchType:
         """From here we create new mock.patch parsing the :param target parameter. You can just set your
         target as normal imported class, module or method. You don't need to pass it as string like
         normal mock.patch does. Here we make it easier by just allowing to set the :param target parameter
@@ -465,23 +510,36 @@ class MockerBuilder(ABC):
         parameter as string. The target can be am imported class or module but the attribute need 
         to be passed as string:
             ...
-            >>> from testing_heroes.my_heroes import MyHeroes
+            >>> from testing_heroes.my_heroes import JusticeLeague
 
             >>> class TestMyHeroes(MockerBuilder):
 
             >>>     @MockerBuilder.initializer
             >>>     def mocker_builder_setup(self):
-                        self.mock_my_hero_attribute = self.add_mock(
-                            target=MyHeroes,
-                            attribute='_my_hero',
-                            mock_configure={
-                                'eating_banana.return_value': "Banana Noooo!",
-                                'just_says.side_effect': ["Nothing to say!"]
-                            }
+                        self.mock_justice_league__init__ = self.patch(
+                            target=JusticeLeague.__init__
                         )
-                    def test_my_hero_attribute(self):
-                        assert self.mock_my_hero_attribue().eating_banana() == "Banana Noooo!"
-                        assert self.mock_my_hero_attribue().just_says() == "Nothing to say!"
+            >>>
+            >>>     @pytest.mark.asyncio
+            >>>     async def test_heroes_sleeping(self):
+            >>>         justce_league = JusticeLeague()
+                        assert self.mock_justice_league__init__().called
+            >>>
+            >>>         async def hero_names():
+                            yield Batman().nickname
+                            yield Robin().nickname
+                        _hero_names = hero_names()
+            >>>
+            >>>         async for result in justce_league.are_heroes_sleeping():
+                            assert result == "=== Heroes are awakened ==="
+            >>>
+            >>>         self.mock_justice_league__init__.stop()
+            >>>         justce_league = JusticeLeague()
+            >>>
+            >>>         async for result in justce_league.are_heroes_sleeping():
+                            _hero_name = await _hero_names.__anext__()
+                            print(result, _hero_name)
+                            assert result == f"MagicMock=>({_hero_name}): ZZzzzz"
         -----------------------------------------------------------------------------------------
         Types description:
             >>> TargetType = TypeVar('TargetType', Callable, ModuleType, str)
@@ -580,7 +638,7 @@ class MockerBuilder(ABC):
                 standard dot notation:
 
                 ...
-                self.mock_who_is_my_hero = self.add_mock(
+                self.mock_who_is_my_hero = self.patch(
                     target=Batman,
                     mock_configure={
                         'return_value.nickname': 'Bat Mock',
@@ -593,10 +651,10 @@ class MockerBuilder(ABC):
                 ...
 
         Returns:
-            TMocker.TMockType: AsyncMock if target is if the patched object is asynchronous or 
+            TMocker.PatchType: AsyncMock if target is if the patched object is asynchronous or 
                 MagicMock if not.
         """
-        return TMocker.add(
+        return TMocker._patch(
             TMockMetadataBuilder()(
                 target=target,
                 method=method,
