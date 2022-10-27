@@ -1,6 +1,7 @@
 from setuptools import setup, find_packages
 from codecs import open
 from os import path
+from mocker_builder.mocker_builder import __version__
 
 DESCRIPTION = path.abspath(path.dirname(__file__))
 
@@ -9,8 +10,9 @@ with open(path.join(DESCRIPTION, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name="mocker-builder",
-    version="0.1.0",
-    description="Python library to build mock tests dynamicaly",
+    version=__version__,
+    description="Python library to build mock tests dynamicaly using the mocker "
+    "feature from pytest-mock lib",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://mocker-builder.readthedocs.io/",
