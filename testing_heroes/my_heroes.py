@@ -1,5 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+import asyncio
 from dataclasses import dataclass
 from typing import List
 
@@ -153,7 +154,8 @@ class MyHeroes:
 
     def who_is_my_hero(self):
         print(f"""
-        {self._my_hero.__class__.__name__} is my hero because {self.is_eating_banana()},
+        {self._my_hero.__class__.__name__}, also called by {self._my_hero.nickname}
+        is my hero because {self.is_eating_banana()},
         {self.is_wearing_pyjama()}, {self.just_call_for()} and just says:
         {self.just_says()}
         """)
@@ -182,11 +184,12 @@ def asks_what_other_hero_have_to_say_about_been_hero():
 
 THE_BEST_HERO: IHero = PeakyBlinder()
 OTHER_HERO: IHero = None
+UGLY_HERO: str = 'Me'
 
 
 def who_is_my_hero(_my_hero: IHero = None):
     testing = MyHeroes()
-    testing.my_hero = _my_hero
+    testing.my_hero = _my_hero if _my_hero else Batman()
     testing.who_is_my_hero()
 
 
@@ -203,12 +206,9 @@ def initialize_other_hero():
 class JusticeLeague:
 
     def __init__(self) -> None:
-        self._heroes: List[IHero] = [
-            Batman(),
-            Robin()
-        ]
+        self._heroes: List[IHero] = []
 
-    def add_hero(self, hero: IHero):
+    def join_hero(self, hero: IHero):
         self._heroes.append(hero)
 
     def show_heroes(self):
@@ -232,8 +232,43 @@ class JusticeLeague:
         else:
             return "Eita! Heroes are doing nothing!"
 
-    def call_heroes(self):
-        print("Hey every body come on!!!")
+    def how_can_we_call_for_heores(self):
+        if hasattr(self, '_heroes'):
+            response = []
+            for hero in self._heroes:
+                response.append((
+                    hero.__class__.__name__,
+                    hero.just_call_for()
+                ))
+            return response
+        return "Opss! No heroes over here to call for!"
+
+    async def call_heroes(self):
+        if hasattr(self, '_heroes'):
+            response = []
+            for hero in self._heroes:
+                response.append((
+                    hero.__class__.__name__,
+                    "Come on",
+                    hero.nickname
+                ))
+            return response
+        return "Uuhmm! Nobody here!"
+
+    async def call_everybody(self):
+        await asyncio.sleep(1)
+        return await self.call_heroes()
+
+    async def are_heroes_sleeping(self):
+        if hasattr(self, '_heroes'):
+            for hero in self._heroes:
+                yield (
+                    f"{hero.__class__.__name__}=>({hero.nickname}): ZZzzzz"
+                )
+                await asyncio.sleep(.5)
+        else:
+            await asyncio.sleep(.5)
+            yield "=== Heroes are awakened ==="
 
 
 __all__ = [
