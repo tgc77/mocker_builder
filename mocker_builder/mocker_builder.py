@@ -80,8 +80,8 @@ class TMockMetadata:
 
         _mock: (_TMockType): Mock instance keeper.
 
-        is_active: (bool): Flag to sinalize that mock is active.
-        (We really don't know how gonna use that yet, hehe!)
+        is_active: (bool): Flag to sinalize that mock is active. When set to False mock will be 
+        cleaned up after tested function finished.
     """
     target_path: str = None
     is_async: bool = False
@@ -589,12 +589,12 @@ class MockerBuilder(ABC):
                 to pass `isinstance` tests.
 
             create (bool, optional): By default patch() will fail to replace 
-                attributes that don’t exist. If you pass in create=True, and the attribute doesn’t 
+                attributes that don't exist. If you pass in create=True, and the attribute doesn't 
                 exist, patch will create the attribute for you when the patched function is called, 
                 and delete it again after the patched function has exited. This is useful 
                 for writing tests against attributes that your production code creates at runtime. 
                 It is off by default because it can be dangerous. With it switched on you can write 
-                passing tests against APIs that don’t actually exist!.
+                passing tests against APIs that don't actually exist!.
 
             spec_set (bool, optional): A stricter variant of `spec`. If used, attempting to *set*
                 or get an attribute on the mock that isn't on the object passed as
@@ -605,7 +605,7 @@ class MockerBuilder(ABC):
             replaced. All attributes of the mock will also have the spec of the corresponding 
             attribute of the object being replaced. Methods and functions being mocked will have 
             their arguments checked and will raise a TypeError if they are called with the wrong 
-            signature. For mocks replacing a class, their return value (the ‘instance’) will have 
+            signature. For mocks replacing a class, their return value (the 'instance') will have 
             the same spec as the class. See the create_autospec() function and Autospeccing.
 
             Instead of autospec=True you can pass autospec=some_object to use an arbitrary object 
@@ -638,7 +638,7 @@ class MockerBuilder(ABC):
                 standard dot notation:
 
                 ...
-                self.mock_who_is_my_hero = self.patch(
+                mock_who_is_my_hero = self.patch(
                     target=Batman,
                     mock_configure={
                         'return_value.nickname': 'Bat Mock',
