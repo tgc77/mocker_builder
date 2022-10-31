@@ -186,7 +186,6 @@ class Patcher:
         for mock_metadata in Patcher._mocked_metadata:
             if not mock_metadata.is_active:
                 try:
-                    print("### Removing: ", mock_metadata._patch)
                     Patcher._mocker._patches.remove(mock_metadata._patch)
                 except ValueError:
                     print("Opss!", mock_metadata._patch, "Not found!")
@@ -311,6 +310,11 @@ class TMockMetadataBuilder:
                 except ValueError:
                     module, attr = target.rsplit('.', 1)
                     _target_path = (module, attr)
+            elif inspect.isdatadescriptor(target):
+                raise MockerBuilderException(
+                    "### Sorry, but in the moment we are not prepared "
+                    "to deal with @property type mocking like that yet ###"
+                )
             elif isinstance(target, object):
                 _target_path = tuple(filter(None, [
                     target.__module__,
@@ -336,8 +340,6 @@ class TMockMetadataBuilder:
             check_mock_target = self.__load_safe_mock_target_path_from_module(_target_path)
             if inspect.iscoroutinefunction(check_mock_target):
                 self._mock_metadata.is_async = True
-                # TODO: Dev return_value and/or side_effect condicional Ex if result:... else: ...
-                # TODO  also test using side_effect with asyncio.Future
 
             return self._mock_metadata
         except Exception as ex:
@@ -424,13 +426,20 @@ class TMocker:
             return self.__get_mock()
 
         def __exit__(self, exc_type, exc_val, exc_tb):
-            pass
+            self.stop()
 
         def __get_mock(self) -> _TMockType:
             return self.mock_metadata._mock
 
-        def set_result(self, result: ReturnValueType):
-            self.mock_metadata.return_value = result
+        def set_result(
+            self,
+            return_value: ReturnValueType = None,
+            side_effect: SideEffectType = None
+        ):
+            # TODO Let's think how to allow conditional setting return_value and/or side_effect.
+            # Ex: return_value = foo if foo else buu
+            self.mock_metadata.return_value = return_value
+            self.mock_metadata.side_effect = side_effect
             _mock = Patcher.dispatch(
                 self.mock_metadata
             )
@@ -439,12 +448,12 @@ class TMocker:
         def start(self):
             self.mock_metadata._mock = self.mock_metadata._patch.start()
             self.mock_metadata.is_active = True
-            print(f"Mock {self.__get_mock()} started...")
+            print(f"Mock {self.__get_mock()} started")
 
         def stop(self):
             self.mock_metadata._patch.stop()
             self.mock_metadata.is_active = False
-            print(f"Mock {self.__get_mock()} stopped...")
+            print(f"Mock {self.__get_mock()} stopped")
 
     PatchType = _TPatch[_TMockType]
 

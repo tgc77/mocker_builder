@@ -20,6 +20,7 @@ from mocker_builder import MockerBuilder
 from testing_heroes import my_heroes
 from testing_heroes.my_heroes import (
     Batman,
+    IHero,
     JusticeLeague,
     OtherHero,
     PeakyBlinder,
@@ -30,6 +31,21 @@ from testing_heroes.my_heroes import (
 
 def print_io_test():
     print("Ouieh!!!")
+
+class Foo(IHero):
+    nickname: str = "Bob"
+
+    def eating_banana(self) -> str:
+        return "have no banana"
+
+    def wearing_pyjama(self) -> str:
+        return "have no pyjama"
+
+    def just_call_for(self) -> str:
+        return "Bob Foo"
+
+    def just_says(self) -> str:
+        return "foo foo"
 
 
 class TestMyHeroes(MockerBuilder):
@@ -304,6 +320,92 @@ I'm gonna have a pint!\n"""
         assert my_hero_robin.mock.return_value.wearing_pyjama() == "likes to be naked"
         assert my_hero_robin.mock.return_value.just_call_for() == "Little Mocker"
         assert my_hero_robin.mock.return_value.just_says() == "Mock me baby!"
+
+    def test_set_result_return_value(self):
+        my_hero_robin = self.patch(
+            target=Robin,
+            return_value=Foo()
+        )
+
+        print("--------------------------------------------------------------------------")
+        print("Who is my hero:")
+        print("--------------------------------------------------------------------------")
+        my_heroes.who_is_my_hero(Robin())
+
+        testing = MyHeroes()
+        testing.my_hero = my_heroes.Robin()
+        print("--------------------------------------------------------------------------")
+        print("Who is my mocked hero with return_value = Foo():")
+        print("--------------------------------------------------------------------------")
+        testing.who_is_my_hero()
+
+        assert my_hero_robin.mock.called
+        assert isinstance(my_hero_robin.mock.return_value, Foo)
+
+        print("--------------------------------------------------------------------------")
+        print("Setting mock result return_value=PeakyBlinder()")
+        print("--------------------------------------------------------------------------")
+        my_hero_robin.set_result(
+            return_value=PeakyBlinder()
+        )
+        assert not isinstance(my_hero_robin.mock.return_value, Foo)
+        assert isinstance(my_hero_robin.mock.return_value, PeakyBlinder)
+
+        testing = MyHeroes()
+        testing.my_hero = my_heroes.Robin()
+        print("--------------------------------------------------------------------------")
+        print("Who is my mocked hero with return_value = PeakyBlinder():")
+        print("--------------------------------------------------------------------------")
+        testing.who_is_my_hero()
+
+    def test_set_result_side_effect(self):
+        my_hero_robin = self.patch(
+            target=PeakyBlinder,
+            side_effect=lambda: Foo()
+        )
+
+        print("--------------------------------------------------------------------------")
+        print("Who is my hero:")
+        print("--------------------------------------------------------------------------")
+        my_heroes.who_is_my_hero(PeakyBlinder())
+
+        testing = MyHeroes()
+        testing.my_hero = my_heroes.PeakyBlinder()
+        print("--------------------------------------------------------------------------")
+        print("Who is my mocked hero with side_effect = Foo():")
+        print("--------------------------------------------------------------------------")
+        testing.who_is_my_hero()
+
+        assert my_hero_robin.mock.called
+        assert isinstance(testing.my_hero, Foo)
+
+        print("--------------------------------------------------------------------------")
+        print("""Setting mock result side_effect=[
+    OtherHero(), 
+    TypeError('Ops! No hero like that!')
+]""")
+        print("--------------------------------------------------------------------------")
+        my_hero_robin.set_result(
+            side_effect=[OtherHero(), TypeError("Ops! No hero like that!")]
+        )
+        testing.my_hero = my_heroes.PeakyBlinder()
+
+        assert not isinstance(testing.my_hero, Foo)
+        assert isinstance(testing.my_hero, OtherHero)
+
+        print("--------------------------------------------------------------------------")
+        print("Who is my mocked hero with side_effect = OtherHero():")
+        print("--------------------------------------------------------------------------")
+        testing.who_is_my_hero()
+
+        print("--------------------------------------------------------------------------")
+        print("Testing side_effect = TypeError('Ops! No hero like that!')")
+        print("--------------------------------------------------------------------------")
+        with pytest.raises(TypeError) as ex:
+            testing.my_hero = my_heroes.PeakyBlinder()
+            testing.who_is_my_hero()
+        assert "Ops! No hero like that!" == str(ex.value)
+
 
 ```
 
