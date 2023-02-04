@@ -1,20 +1,15 @@
 
 build:
-	$(info Building dist...)
 	python setup.py sdist bdist_wheel
-	$(info Done)
-
-	$(info Checking dist...)
 	twine check dist/*
-	$(info Done)
 
 test-upload: build
-	python -m twine upload --repository testpypi dist/*
+	python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 
 test-install:
 	python3 -m pip install --index-url https://test.pypi.org/mocker-builder/ --no-deps mocker-builder-tiago77.py
 
-upload:
+upload: build
 	twine upload dist/*
 
 clean:
