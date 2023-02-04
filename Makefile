@@ -1,12 +1,12 @@
 
 build:
-	echo "Building dist..."
-	# python setup.py sdist bdist_wheel
-	echo "Done"
+	$(info Building dist...)
+	python setup.py sdist bdist_wheel
+	$(info Done)
 
-	echo "Checking dist..."
-	# twine check dist/*
-	echo "Done"
+	$(info Checking dist...)
+	twine check dist/*
+	$(info Done)
 
 test-upload: build
 	python -m twine upload --repository testpypi dist/*
@@ -17,4 +17,8 @@ test-install:
 upload:
 	twine upload dist/*
 
-.PHONY: build test-upload upload test-install
+clean:
+	$(info Cleaning previos build files)
+	rm -rf ./build ./dist
+
+.PHONY: build test-upload upload test-install clean
