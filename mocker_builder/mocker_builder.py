@@ -46,7 +46,7 @@ MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 _Patch = TypeVar('_Patch', bound=_PatchType)
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 
 class MockerBuilderWarning:
