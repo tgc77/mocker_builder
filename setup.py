@@ -15,7 +15,8 @@ setup(
     "feature from pytest-mock lib",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://mocker-builder.readthedocs.io/",
+    keywords="pytest mock mocker",
+    url="https://github.com/tgc77/mocker_builder",
     author="Tiago G Cunha",
     author_email="tikx.batera@gmail.com",
     license="MIT",
@@ -30,16 +31,20 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Operating System :: OS Independent"
     ],
-    packages=find_packages(include=['mocker_builder']),
+    packages=find_packages(where='mocker_builder'),
     include_package_data=True,
     install_requires=[
-        'pytest',
-        'pytest_mock'
+        'pytest==7.1.3',
+        'pytest-mock==3.8.2'
     ],
     setup_requires=['pytest-runner'],
     tests_require=[
-        'pytest',
-        'pytest_mock'
+        'pytest==7.1.3',
+        'pytest-mock==3.8.2'
     ],
     test_suite='tests',
+    project_urls={
+        "Documentation": "https://mocker-builder.readthedocs.io",
+        "Source": "https://github.com/tgc77/mocker_builder",
+    },
 )
