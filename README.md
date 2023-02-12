@@ -1,5 +1,5 @@
 # Mocker Builder
-Testing tools for mocking and patching based on pytest_mock mocker features.
+Testing tools for mocking and patching based on pytest_mock mocker features but with improvements.
 
 ### Installation
 ```
@@ -9,10 +9,47 @@ pip install mocker-builder
 ### Initializer
 To start using mucker-builder features just create your Test class, inherit from MockerBuilder class,
 implement the required abstract method mocker_builder_setup decorating it with the @MockerBuilder.initializer
-decorator and start building your mocks and fixtures just like that:
+decorator and start building your mocks and fixtures, adding mocks from your test_... methods, 
+but you must declare the mocker_builder_setup method and decorate it with the 
+@MockerBuilder.initializer decorator to be able to use MockerBuilder features.
 
 ```Python
-from io import StringIO
+...
+def print_io_test():
+    print("Ouieh!!!")
+    
+class TestMyHeroes(MockerBuilder):
+
+    @MockerBuilder.initializer
+    def mocker_builder_setup(self):
+        pass
+...
+def test_io(self):
+    mock_test_io = self.patch(
+        target='sys.stdout',
+        new_callable=StringIO
+    )
+    print_io_test()
+    assert mock_test_io().getvalue() == 'Ouieh!!!\n'
+```
+
+### The self.patch TMocker.PatchType properties
+The self.patch method creates a new patch/mock object. It is a patch/mock because by doing:
+```Python
+my_tested_thing = self.patch(...)
+```
+my_tested_thing has some properties of a mock.patch object, like start, stop and set_result. 
+To get access to the patched mock we can just:
+```Python
+assert my_tested_thing.mock.called
+Or
+assert my_tested_thing().called
+```
+Both ways return an MagicMock or an AsyncMock if the tested method is async.
+
+For a complete exemple flow just have a look bellow:
+
+```Python
 from unittest.mock import PropertyMock
 import pytest
 
@@ -27,10 +64,6 @@ from testing_heroes.my_heroes import (
     MyHeroes,
     Robin
 )
-
-
-def print_io_test():
-    print("Ouieh!!!")
 
 class Foo(IHero):
     nickname: str = "Bob"
@@ -58,7 +91,7 @@ class TestMyHeroes(MockerBuilder):
             content=PeakyBlinder(
                 bananas=12,
                 pyjamas=7,
-                nickname="Bellboy"
+                nickname="Thomas Shelby"
             )
         )
         # =================== Setting mocks ======================
@@ -95,13 +128,59 @@ class TestMyHeroes(MockerBuilder):
         )
         # ========================================================
 
-    def test_io(self):
-        self.mock_test_io = self.patch(
-            target='sys.stdout',
-            new_callable=StringIO
-        )
-        print_io_test()
-        assert self.mock_test_io().getvalue() == 'Ouieh!!!\n'
+    @pytest.mark.asyncio
+    async def test_heroes_sleeping(self):
+        justce_league = JusticeLeague()
+        assert self.mock_justice_league__init__().called
+
+        async def hero_names():
+            yield Batman().nickname
+            yield Robin().nickname
+        _hero_names = hero_names()
+
+        async for result in justce_league.are_heroes_sleeping():
+            assert result == "=== Heroes are awakened ==="
+
+        self.mock_justice_league__init__.stop()
+        justce_league = JusticeLeague()
+
+        async for result in justce_league.are_heroes_sleeping():
+            _hero_name = await _hero_names.__anext__()
+            print(result, _hero_name)
+            assert result == f"MagicMock=>({_hero_name}): ZZzzzz"
+
+    @pytest.mark.asyncio
+    async def test_call_heroes(self):
+        # Remember that JusticeLeague.__init__ still mocked, so calling JusticeLeague() doesn't
+        # initialize JusticeLeague._heroes attribute.
+
+        justce_league = JusticeLeague()
+        assert await justce_league.call_everybody() == "Uuhmm! Nobody here!"
+
+        with pytest.raises(AttributeError) as ex:
+            justce_league.join_hero(Batman())
+        assert "'JusticeLeague' object has no attribute '_heroes'" == str(ex.value)
+
+        # We just stop mocking JusticeLeague.__init__ to test a different behavior below
+        self.mock_justice_league__init__.stop()
+        del justce_league
+
+        with self.patch(
+            JusticeLeague,
+            '_heroes',
+            create=True,
+            return_value=PropertyMock(spec=list, return_value=[])
+        ):
+
+            justce_league = JusticeLeague()
+            justce_league.join_hero(Batman())
+            # my_heroes.Batman() still mocked
+            justce_league.join_hero(my_heroes.Batman())
+
+            assert await justce_league.call_everybody() == [
+                ('Batman', 'Come on', 'Big Fat Bat'),
+                ('MagicMock', 'Come on', 'Bat Mock')
+            ]
 
     def test_mock_my_heroes_class(self):
         mock_my_heroes_class = self.patch(
@@ -243,60 +322,6 @@ I'm gonna have a pint!\n"""
         ]
         assert self.my_hero_batman.mock.called
 
-    @pytest.mark.asyncio
-    async def test_heroes_sleeping(self):
-        justce_league = JusticeLeague()
-        assert self.mock_justice_league__init__().called
-
-        async def hero_names():
-            yield Batman().nickname
-            yield Robin().nickname
-        _hero_names = hero_names()
-
-        async for result in justce_league.are_heroes_sleeping():
-            assert result == "=== Heroes are awakened ==="
-
-        self.mock_justice_league__init__.stop()
-        justce_league = JusticeLeague()
-
-        async for result in justce_league.are_heroes_sleeping():
-            _hero_name = await _hero_names.__anext__()
-            print(result, _hero_name)
-            assert result == f"MagicMock=>({_hero_name}): ZZzzzz"
-
-    @pytest.mark.asyncio
-    async def test_call_heroes(self):
-        # Remember that JusticeLeague.__init__ still mocked, so calling JusticeLeague() doesn't
-        # initialize JusticeLeague._heroes attribute.
-
-        justce_league = JusticeLeague()
-        assert await justce_league.call_everybody() == "Uuhmm! Nobody here!"
-
-        with pytest.raises(AttributeError) as ex:
-            justce_league.join_hero(Batman())
-        assert "'JusticeLeague' object has no attribute '_heroes'" == str(ex.value)
-
-        # We just stop mocking JusticeLeague.__init__ to test a different behavior below
-        self.mock_justice_league__init__.stop()
-        del justce_league
-
-        with self.patch(
-            JusticeLeague,
-            '_heroes',
-            create=True,
-            return_value=PropertyMock(spec=list, return_value=[])
-        ):
-
-            justce_league = JusticeLeague()
-            justce_league.join_hero(Batman())
-            # my_heroes.Batman() still mocked
-            justce_league.join_hero(my_heroes.Batman())
-
-            assert await justce_league.call_everybody() == [
-                ('Batman', 'Come on', 'Big Fat Bat'),
-                ('MagicMock', 'Come on', 'Bat Mock')
-            ]
-
     def test_my_hero_robin(self):
         my_hero_robin = self.patch(
             target=Robin(),  # XXX we can mock from object instance! Ouieh!
@@ -408,37 +433,3 @@ I'm gonna have a pint!\n"""
 
 
 ```
-
-You also can add mocks from your test_... methods, but you must declare the mocker_builder_setup method 
-and decorate it with the @MockerBuilder.initializer decorator to be able to use MockerBuilder features.
-
-```Python
-...
-class TestMyHeroes(MockerBuilder):
-
-    @MockerBuilder.initializer
-    def mocker_builder_setup(self):
-        pass
-...
-def test_io(self):
-    mock_test_io = self.patch(
-        target='sys.stdout',
-        new_callable=StringIO
-    )
-    print_io_test()
-    assert mock_test_io().getvalue() == 'Ouieh!!!\n'
-```
-
-### The self.patch TMocker.PatchType properties
-The self.patch method creates a new patch/mock object. It is a patch/mock because by doing:
-```Python
-my_tested_thing = self.patch(...)
-```
-my_tested_thing has some properties of a mock.patch object, like start, stop and set_result. 
-To get access to the patched mock we can just:
-```Python
-assert my_tested_thing.mock.called
-Or
-assert my_tested_thing().called
-```
-Both ways return an MagicMock or an AsyncMock if the tested method is async.
