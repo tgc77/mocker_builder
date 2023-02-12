@@ -1,7 +1,7 @@
 ###################################################################################################
 # mocker-builder
 ###################################################################################################
-# Testing tools for mocking and patching based on pytest_mock mocker featuresbut with improvements.
+# Testing tools for mocking and patching based on pytest_mock mocker features, but with improvements.
 # Maintained by Tiago G Cunha
 # Backport available from:
 # https://pypi.org/project/mocker-builder
