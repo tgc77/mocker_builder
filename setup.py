@@ -31,7 +31,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Operating System :: OS Independent"
     ],
-    packages=find_packages(where='mocker_builder'),
+    packages=find_packages(include=['mocker_builder']),
     include_package_data=True,
     install_requires=[
         'pytest==7.1.3',
