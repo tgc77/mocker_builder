@@ -45,7 +45,7 @@ class TestMyHeroes(MockerBuilder):
             content=PeakyBlinder(
                 bananas=12,
                 pyjamas=7,
-                nickname="Bellboy"
+                nickname="Thomas Shelby"
             )
         )
         # =================== Setting mocks ======================
@@ -89,6 +89,60 @@ class TestMyHeroes(MockerBuilder):
         )
         print_io_test()
         assert self.mock_test_io().getvalue() == 'Ouieh!!!\n'
+
+    @pytest.mark.asyncio
+    async def test_heroes_sleeping(self):
+        justce_league = JusticeLeague()
+        assert self.mock_justice_league__init__().called
+
+        async def hero_names():
+            yield Batman().nickname
+            yield Robin().nickname
+        _hero_names = hero_names()
+
+        async for result in justce_league.are_heroes_sleeping():
+            assert result == "=== Heroes are awakened ==="
+
+        self.mock_justice_league__init__.stop()
+        justce_league = JusticeLeague()
+
+        async for result in justce_league.are_heroes_sleeping():
+            _hero_name = await _hero_names.__anext__()
+            print(result, _hero_name)
+            assert result == f"MagicMock=>({_hero_name}): ZZzzzz"
+
+    @pytest.mark.asyncio
+    async def test_call_heroes(self):
+        # Remember that JusticeLeague.__init__ still mocked, so calling JusticeLeague() doesn't
+        # initialize JusticeLeague._heroes attribute.
+
+        justce_league = JusticeLeague()
+        assert await justce_league.call_everybody() == "Uuhmm! Nobody here!"
+
+        with pytest.raises(AttributeError) as ex:
+            justce_league.join_hero(Batman())
+        assert "'JusticeLeague' object has no attribute '_heroes'" == str(ex.value)
+
+        # We just stop mocking JusticeLeague.__init__ to test a different behavior below
+        self.mock_justice_league__init__.stop()
+        del justce_league
+
+        with self.patch(
+            JusticeLeague,
+            '_heroes',
+            create=True,
+            return_value=PropertyMock(spec=list, return_value=[])
+        ):
+
+            justce_league = JusticeLeague()
+            justce_league.join_hero(Batman())
+            # my_heroes.Batman() still mocked
+            justce_league.join_hero(my_heroes.Batman())
+
+            assert await justce_league.call_everybody() == [
+                ('Batman', 'Come on', 'Big Fat Bat'),
+                ('MagicMock', 'Come on', 'Bat Mock')
+            ]
 
     def test_mock_my_heroes_class(self):
         mock_my_heroes_class = self.patch(
@@ -229,60 +283,6 @@ I'm gonna have a pint!\n"""
             ("Robin", "just calls for Little Bastard")
         ]
         assert self.my_hero_batman.mock.called
-
-    @pytest.mark.asyncio
-    async def test_heroes_sleeping(self):
-        justce_league = JusticeLeague()
-        assert self.mock_justice_league__init__().called
-
-        async def hero_names():
-            yield Batman().nickname
-            yield Robin().nickname
-        _hero_names = hero_names()
-
-        async for result in justce_league.are_heroes_sleeping():
-            assert result == "=== Heroes are awakened ==="
-
-        self.mock_justice_league__init__.stop()
-        justce_league = JusticeLeague()
-
-        async for result in justce_league.are_heroes_sleeping():
-            _hero_name = await _hero_names.__anext__()
-            print(result, _hero_name)
-            assert result == f"MagicMock=>({_hero_name}): ZZzzzz"
-
-    @pytest.mark.asyncio
-    async def test_call_heroes(self):
-        # Remember that JusticeLeague.__init__ still mocked, so calling JusticeLeague() doesn't
-        # initialize JusticeLeague._heroes attribute.
-
-        justce_league = JusticeLeague()
-        assert await justce_league.call_everybody() == "Uuhmm! Nobody here!"
-
-        with pytest.raises(AttributeError) as ex:
-            justce_league.join_hero(Batman())
-        assert "'JusticeLeague' object has no attribute '_heroes'" == str(ex.value)
-
-        # We just stop mocking JusticeLeague.__init__ to test a different behavior below
-        self.mock_justice_league__init__.stop()
-        del justce_league
-
-        with self.patch(
-            JusticeLeague,
-            '_heroes',
-            create=True,
-            return_value=PropertyMock(spec=list, return_value=[])
-        ):
-
-            justce_league = JusticeLeague()
-            justce_league.join_hero(Batman())
-            # my_heroes.Batman() still mocked
-            justce_league.join_hero(my_heroes.Batman())
-
-            assert await justce_league.call_everybody() == [
-                ('Batman', 'Come on', 'Big Fat Bat'),
-                ('MagicMock', 'Come on', 'Bat Mock')
-            ]
 
     def test_my_hero_robin(self):
         my_hero_robin = self.patch(
