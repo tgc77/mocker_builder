@@ -1,11 +1,11 @@
-##########################################################################################
+###################################################################################################
 # mocker-builder
-##########################################################################################
-# Testing tools for mocking and patching based on pytest_mock mocker features.
+###################################################################################################
+# Testing tools for mocking and patching based on pytest_mock mocker featuresbut with improvements.
 # Maintained by Tiago G Cunha
 # Backport available from:
 # https://pypi.org/project/mocker-builder
-##########################################################################################
+###################################################################################################
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -46,7 +46,7 @@ MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 _Patch = TypeVar('_Patch', bound=_PatchType)
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 
 class MockerBuilderWarning:
