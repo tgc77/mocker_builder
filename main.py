@@ -1,4 +1,3 @@
-import asyncio
 from io import StringIO
 from unittest.mock import PropertyMock
 import pytest
