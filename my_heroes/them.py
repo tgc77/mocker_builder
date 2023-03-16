@@ -5,10 +5,42 @@ from dataclasses import dataclass
 from typing import List
 
 
-class IHero(ABC):
+class IHeroHobby(ABC):  # Entity
+    what_i_do: str = None
+
+    @abstractmethod
+    def get_hobby(cls) -> IHeroHobby:
+        raise NotImplementedError("Implement it, your lazy!")
+
+
+@dataclass
+class HobbyHero(IHeroHobby):  # Model
+    what_i_do: str = None
+
+    def get_hobby(self) -> IHeroHobby:
+        return HobbyHero(
+            what_i_do=self.what_i_do
+        )
+
+
+class IHero(ABC):  # Repository
     bananas: int
     pyjamas: int
     nickname: str
+    my_hobby: HobbyHero
+
+    @classmethod
+    async def which_hero_i_am(cls):
+        return f"I am {cls.__name__}"
+
+    async def what_i_do_when_nobody_is_looking(self) -> IHeroHobby:
+        return self.my_hobby.get_hobby()
+
+    def get_my_hero_hobby(self) -> IHeroHobby:
+        return self.my_hobby.get_hobby()
+
+    def set_my_hero_hobby(self, hobby: str):
+        self.my_hobby = HobbyHero(hobby)
 
     @abstractmethod
     def eating_banana(self) -> str:
@@ -32,6 +64,7 @@ class FakeHero(IHero):
     bananas: int = 2
     pyjamas: int = 2
     nickname: str = 'Bad Fat Hero'
+    my_hobby: HobbyHero = None
 
     def eating_banana(self):
         return f"is eating {self.bananas} banana(s)"
@@ -57,7 +90,8 @@ class FakeHero(IHero):
 class PeakyBlinder(IHero):
     bananas: int = 3
     pyjamas: int = 2
-    nickname: str = "Tomas Shelby"
+    nickname: str = "Bart Burp"
+    my_hobby: HobbyHero = None
 
     def eating_banana(self):
         return f"is eating {self.bananas} banana(s)"
@@ -77,6 +111,7 @@ class Batman(IHero):
     bananas: int = 5
     pyjamas: int = 1
     nickname: str = "Big Fat Bat"
+    my_hobby: HobbyHero = None
 
     def eating_banana(self):
         return f"is eating {self.bananas} banana(s)"
@@ -96,6 +131,7 @@ class Robin(IHero):
     bananas: int = 1
     pyjamas: int = 4
     nickname: str = "Little Bastard"
+    my_hobby: HobbyHero = None
 
     def eating_banana(self):
         return f"is eating {self.bananas} banana(s)"
@@ -115,6 +151,7 @@ class OtherHero(IHero):
     bananas: int = 1
     pyjamas: int = 1
     nickname: str = "Bob"
+    my_hobby: HobbyHero = None
 
     def eating_banana(self):
         return f"is eating {self.bananas} banana(s)"
@@ -129,16 +166,26 @@ class OtherHero(IHero):
         return "Ouieh!"
 
 
-class MyHeroes:
+class MyHeroes:  # HeroesRepository
     _my_hero: IHero = None
 
     @property
-    def my_hero(self):
+    def my_hero(self) -> IHero:
         return self._my_hero
 
     @my_hero.setter
     def my_hero(self, hero):
         self._my_hero = hero
+
+    def does(self) -> str:
+        hero_hobby = self._my_hero.get_my_hero_hobby()
+        return hero_hobby.what_i_do
+
+    def set_what_my_hero_does(self, hobby: str):
+        self.my_hero.set_my_hero_hobby(hobby)
+
+    async def what_my_hero_does_when_nobody_is_looking(self):
+        return await self._my_hero.what_i_do_when_nobody_is_looking()
 
     def is_eating_banana(self) -> str:
         return self._my_hero.eating_banana()
