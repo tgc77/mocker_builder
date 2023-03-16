@@ -46,7 +46,7 @@ MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 _Patch = TypeVar('_Patch', bound=_PatchType)
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 
 class MockerBuilderWarning:
@@ -200,17 +200,17 @@ class TMockMetadataBuilder:
     Args:
         _mock_metadata (TMockMetadata): Mock metadata instance to propagate mock state.
 
-        __mock_keys_validate (List[str]): Mock parameters we need to check if were setted to 
+        _mock_keys_validate (List[str]): Mock parameters we need to check if were setted to 
         dispatch to mock.patch creation.
 
-        __bypass_methods (List[str]): Methods we need keeping properly behavior for return value.
+        _bypass_methods (List[str]): Methods we need keeping properly behavior for return value.
 
     Raises:
         MockerBuilderException: Notify users when we found in trouble.
 
     """
     _mock_metadata: TMockMetadata = None
-    __mock_keys_validate: List[str] = field(default_factory=lambda: [
+    _mock_keys_validate: List[str] = field(default_factory=lambda: [
         'new',
         'spec',
         'create',
@@ -222,7 +222,7 @@ class TMockMetadataBuilder:
         'mock_configure',
         'mock_kwargs'
     ])
-    __bypass_methods: List[str] = field(default_factory=lambda: [
+    _bypass_methods: List[str] = field(default_factory=lambda: [
         '__init__'
     ])
 
@@ -231,7 +231,7 @@ class TMockMetadataBuilder:
         mock_metadata_kwargs: MockMetadataKwargsType
     ):
         kwargs = {}
-        for attr in self.__mock_keys_validate:
+        for attr in self._mock_keys_validate:
             value = mock_metadata_kwargs.get(attr)
             if value:
                 if isinstance(value, dict):
@@ -242,7 +242,7 @@ class TMockMetadataBuilder:
         self._mock_metadata.patch_kwargs = kwargs
 
     def __apply_bypass_methods_return_value(self):
-        if self._mock_metadata.target_path.rsplit('.', 1)[-1] in self.__bypass_methods:
+        if self._mock_metadata.target_path.rsplit('.', 1)[-1] in self._bypass_methods:
             self._mock_metadata.return_value = None
 
     def __unpack_params(self, mock_metadata_kwargs: MockMetadataKwargsType) -> Tuple:
@@ -287,9 +287,6 @@ class TMockMetadataBuilder:
             # the path to string.
             attr = method if method else attribute if attribute else None
             if inspect.isclass(target):
-                # TODO we will check if need that
-                # if not attr:
-                #     attr = '__init__'
                 _target_path = tuple(filter(None, [
                     target.__module__,
                     target.__name__,
@@ -399,12 +396,9 @@ class TMocker:
     def _patch(
         mock_metadata: TMockMetadata
     ) -> TMocker.PatchType:
-        _mock = Patcher.dispatch(
-            mock_metadata
-        )
-        return _mock
+        return Patcher.dispatch(mock_metadata)
 
-    @dataclass
+    @dataclass(init=False)
     class _TPatch(Generic[_TMockType]):
         """Our specialized Mock to handle with MagicMock or AsyncMock types.
 
@@ -413,7 +407,10 @@ class TMocker:
 
             mock_metadata (TMockMetadata): Mock metadata instance given from MockMetadata Builder.
         """
-        mock_metadata: TMockMetadata = None
+        __mock_metadata: TMockMetadata = None
+
+        def __init__(self, mock_metadata: TMockMetadata) -> None:
+            self.__mock_metadata = mock_metadata
 
         @property
         def mock(self) -> MockType:
@@ -429,7 +426,7 @@ class TMocker:
             self.stop()
 
         def __get_mock(self) -> _TMockType:
-            return self.mock_metadata._mock
+            return self.__mock_metadata._mock
 
         def set_result(
             self,
@@ -438,21 +435,21 @@ class TMocker:
         ):
             # TODO Let's think how to allow conditional setting return_value and/or side_effect.
             # Ex: return_value = foo if foo else buu
-            self.mock_metadata.return_value = return_value
-            self.mock_metadata.side_effect = side_effect
-            _mock = Patcher.dispatch(
-                self.mock_metadata
+            self.__mock_metadata.return_value = return_value
+            self.__mock_metadata.side_effect = side_effect
+            _tpath = Patcher.dispatch(
+                self.__mock_metadata
             )
-            self.mock_metadata = _mock.mock_metadata
+            self.__mock_metadata = _tpath.__mock_metadata
 
         def start(self):
-            self.mock_metadata._mock = self.mock_metadata._patch.start()
-            self.mock_metadata.is_active = True
+            self.__mock_metadata._mock = self.__mock_metadata._patch.start()
+            self.__mock_metadata.is_active = True
             print(f"Mock {self.__get_mock()} started")
 
         def stop(self):
-            self.mock_metadata._patch.stop()
-            self.mock_metadata.is_active = False
+            self.__mock_metadata._patch.stop()
+            self.__mock_metadata.is_active = False
             print(f"Mock {self.__get_mock()} stopped")
 
     PatchType = _TPatch[_TMockType]
@@ -692,7 +689,14 @@ class MockerBuilder(ABC):
         # def the_fixture(_fixture) -> content.__class__:
         # result = yield content
         # print("### Gonna clean up fixture_content...")
-        return content
+        if callable(content):
+            result = content()
+        else:
+            result = content
+        if inspect.isgenerator(result):
+            return next(result)
+        else:
+            return result
 
 
 # def fixture_content(
