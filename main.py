@@ -1,3 +1,4 @@
+import asyncio
 from io import StringIO
 from unittest.mock import PropertyMock
 import pytest
@@ -6,6 +7,7 @@ from mocker_builder import MockerBuilder
 from my_heroes import them
 from my_heroes.them import (
     Batman,
+    HobbyHero,
     IHero,
     JusticeLeague,
     OtherHero,
@@ -49,6 +51,16 @@ class TestMyHeroes(MockerBuilder):
             )
         )
         # =================== Setting mocks ======================
+        self.what_i_do_when_nobody_is_looking = self.patch(
+            PeakyBlinder,
+            'what_i_do_when_nobody_is_looking',
+            return_value=HobbyHero("I just drink wisky")
+        )
+        self.get_my_hero_hobby = self.patch(
+            Robin,
+            'get_my_hero_hobby',
+            return_value=HobbyHero("I just watch TV")
+        )
         self.mock_my_heroes_module = self.patch(
             target=them.initialize_other_hero
         )
@@ -81,6 +93,38 @@ class TestMyHeroes(MockerBuilder):
             target=JusticeLeague.__init__
         )
         # ========================================================
+
+    @pytest.mark.asyncio
+    async def test_what_i_do_when_nobody_is_looking(self):
+        him = MyHeroes()
+        him.my_hero = PeakyBlinder(
+            my_hobby=HobbyHero(
+                what_i_do="Shot someone"
+            )
+        )
+        peaky_blinder = await him.what_my_hero_does_when_nobody_is_looking()
+
+        assert self.what_i_do_when_nobody_is_looking.mock.called
+        assert not peaky_blinder.what_i_do == "Shot someone"
+        assert peaky_blinder.what_i_do == "I just drink wisky"
+        assert him.does() == "Shot someone"
+        assert not him.does() == "I just drink wisky"
+
+        robs = MyHeroes()
+        robs.my_hero = Robin(
+            my_hobby=HobbyHero(
+                what_i_do="I catch bad guys"
+            )
+        )
+        robin = await robs.what_my_hero_does_when_nobody_is_looking()
+
+        assert not self.get_my_hero_hobby.mock.called
+        assert not robin.what_i_do == "I just watch TV"
+        assert robin.what_i_do == "I catch bad guys"
+        assert not robs.does() == "I catch bad guys"
+        assert robs.does() == "I just watch TV"
+        assert self.get_my_hero_hobby.mock.called
+        assert self.get_my_hero_hobby.mock.call_count == 2
 
     def test_io(self):
         self.mock_test_io = self.patch(
@@ -228,14 +272,14 @@ I'm gonna have a pint!\n"""
             attribute='UGLY_HERO',
             mock_configure={
                 'third': 'You',
-                'who_is_the_most_ugly.return_value': 'Me'
+                'who_is_the_most_ugly.return_value': 'Me again'
             },
             first='Batman',
             second='Robin',
             call_me_a_hero=lambda: PeakyBlinder().nickname
         )
         mock_ugly_hero().configure_mock(
-            fourth='Me again',
+            fourth='Me',
             **{
                 'who_is_my_hero.return_value': Batman().nickname,
                 'who_is_the_most_beautiful.side_effect': ValueError("There isn't any beautiful hero")
@@ -245,9 +289,9 @@ I'm gonna have a pint!\n"""
         assert mock_ugly_hero().first == 'Batman'
         assert mock_ugly_hero().second == 'Robin'
         assert mock_ugly_hero().third == 'You'
-        assert mock_ugly_hero().fourth == 'Me again'
-        assert mock_ugly_hero().who_is_the_most_ugly() == 'Me'
-        assert mock_ugly_hero().call_me_a_hero() == "Tomas Shelby"
+        assert mock_ugly_hero().fourth == 'Me'
+        assert mock_ugly_hero().who_is_the_most_ugly() == 'Me again'
+        assert mock_ugly_hero().call_me_a_hero() == "Bart Burp"
         assert mock_ugly_hero().who_is_my_hero() == "Big Fat Bat"
 
         with pytest.raises(ValueError) as ex:
@@ -368,7 +412,7 @@ I'm gonna have a pint!\n"""
 
         print("--------------------------------------------------------------------------")
         print("""Setting mock result side_effect=[
-    OtherHero(), 
+    OtherHero(),
     TypeError('Ops! No hero like that!')
 ]""")
         print("--------------------------------------------------------------------------")
