@@ -159,7 +159,21 @@ class Patcher:
             TMocker.PatchType: Our Mock Patch Type wrapper.
         """
         if mock_metadata.is_async:
-            mock_metadata.return_value = _asyncio_future(mock_metadata.return_value)
+            mock_metadata.return_value = _asyncio_future(
+                mock_metadata.return_value
+            )
+            _side_effect = mock_metadata.side_effect
+            if _side_effect:
+                if isinstance(_side_effect, list):
+                    futures = []
+                    for call in _side_effect:
+                        futures.append(
+                            _asyncio_future(call)
+                        )
+                    _side_effect = futures
+                else:
+                    _side_effect = _asyncio_future(_side_effect)
+                mock_metadata.side_effect = _side_effect
 
         _patch = Patcher._mocker.mock_module.patch(
             mock_metadata.target_path,
@@ -282,7 +296,7 @@ class TMockMetadataBuilder:
                 "So make your choice."
             )
         try:
-            # Here we need to parse the target parameter to identify the type and spliting by
+            # Here we parse the target parameter to identify the type and spliting by
             # package/module, module, class and method or attribute we are going to mock converting
             # the path to string.
             attr = method if method else attribute if attribute else None
