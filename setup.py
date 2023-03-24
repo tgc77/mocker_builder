@@ -35,12 +35,14 @@ setup(
     include_package_data=True,
     install_requires=[
         'pytest==7.1.3',
-        'pytest-mock==3.8.2'
+        'pytest-mock==3.8.2',
+        'mock==4.0.3'
     ],
     setup_requires=['pytest-runner'],
     tests_require=[
         'pytest==7.1.3',
-        'pytest-mock==3.8.2'
+        'pytest-mock==3.8.2',
+        'mock==4.0.3'
     ],
     test_suite='tests',
     project_urls={
