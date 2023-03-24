@@ -21,6 +21,7 @@ from typing import (
     NewType,
     Optional,
     Tuple,
+    Type,
     TypeVar,
     Union,
 )
@@ -29,12 +30,13 @@ from unittest.mock import (
     DEFAULT,
     _patch as _PatchType,
 )
+from mock import AsyncMock
 from pytest_mock import MockFixture
-from pytest_mock.plugin import AsyncMockType
 import pytest
 import warnings
 
 MockType = NewType('MockType', MagicMock)
+AsyncMockType = NewType('AsyncMockType', AsyncMock)
 _TMockType = TypeVar('_TMockType', bound=Union[MockType, AsyncMockType])
 TargetType = TypeVar('TargetType', Callable, ModuleType, str)
 AttrType = TypeVar('AttrType', bound=str)
@@ -46,14 +48,14 @@ MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 _Patch = TypeVar('_Patch', bound=_PatchType)
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 
 class MockerBuilderWarning:
     """Base class for all warnings emitted by mocker-builder"""
 
     @staticmethod
-    def warn(message: str, *args):
+    def warn(message: str):
         msg = f"\033[93m{message}\033[0m"
         warnings.warn(message=msg, category=UserWarning)
 
@@ -175,11 +177,21 @@ class Patcher:
                     _side_effect = _asyncio_future(_side_effect)
                 mock_metadata.side_effect = _side_effect
 
+        if mock_metadata.is_active:
+            mock_metadata._mock.configure_mock(
+                return_value=mock_metadata.return_value,
+                side_effect=mock_metadata.side_effect
+            )
+            return TMocker.PatchType(
+                mock_metadata
+            )
+
         _patch = Patcher._mocker.mock_module.patch(
             mock_metadata.target_path,
             **mock_metadata.patch_kwargs
         )
         _mocked = _patch.start()
+        _mocked.mock_add_spec(spec=Type[_TMockType])
         mock_metadata.is_active = True
         Patcher._mocker._patches.append(_patch)
         mock_metadata._patch = _patch
