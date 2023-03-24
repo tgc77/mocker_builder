@@ -16,4 +16,7 @@ clean:
 	$(info Cleaning previos build files)
 	rm -rf ./build ./dist
 
-.PHONY: build test-upload upload test-install clean
+run-demo:
+	python -m pytest main.py -vv -s -x
+
+.PHONY: build test-upload upload test-install clean run-demo
