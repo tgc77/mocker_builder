@@ -195,7 +195,7 @@ class Patcher:
             **mock_metadata.patch_kwargs
         )
         _mocked = _patch.start()
-        if (not mock_metadata.new) and (not mock_metadata.new_callable):
+        if (not mock_metadata.new) or (not mock_metadata.new_callable):
             _mocked.mock_add_spec(spec=Type[_TMockType])
         mock_metadata.is_active = True
         Patcher._mocker._patches.append(_patch)
