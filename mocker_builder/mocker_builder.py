@@ -124,6 +124,10 @@ class TMockMetadata:
     def create(self) -> bool:
         return self.patch_kwargs.get('create')
 
+    @property
+    def new_callable(self) -> NewCallableType:
+        return self.patch_kwargs.get('new_callable')
+
 
 try:
     import asyncio
@@ -191,7 +195,8 @@ class Patcher:
             **mock_metadata.patch_kwargs
         )
         _mocked = _patch.start()
-        _mocked.mock_add_spec(spec=Type[_TMockType])
+        if (not mock_metadata.new) and (not mock_metadata.new_callable):
+            _mocked.mock_add_spec(spec=Type[_TMockType])
         mock_metadata.is_active = True
         Patcher._mocker._patches.append(_patch)
         mock_metadata._patch = _patch
