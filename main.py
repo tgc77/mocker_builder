@@ -93,8 +93,25 @@ class TestMyHeroes(MockerBuilder):
         )
         # ========================================================
 
+    def test_robin_becomes_batman(self):
+        self.robin_becomes_batman = self.patch(
+            Robin,
+            new=Batman
+        )
+        robin = Robin()
+        assert robin.nickname == "Little Bastard"
+
+        robin.nickname = "Bat Robinson"
+        assert not self.robin_becomes_batman.mock.nickname == "Bat Robinson"
+        assert self.robin_becomes_batman.mock.nickname == "Big Fat Bat"
+
+        # self.robin_becomes_batman.stop()
+        assert not robin.nickname == "Little Bastard"
+        assert robin.nickname == "Bat Robinson"
+
     @pytest.mark.asyncio
     async def test_what_i_do_when_nobody_is_looking(self):
+        # ----------------------- PeakyBlinder ----------------------
         him = MyHeroes()
         him.my_hero = PeakyBlinder(
             my_hobby=HobbyHero(
@@ -109,6 +126,17 @@ class TestMyHeroes(MockerBuilder):
         assert him.does() == "Shot someone"
         assert not him.does() == "I just drink wisky"
 
+        self.what_i_do_when_nobody_is_looking.set_result(
+            return_value=HobbyHero("Just relax!")
+        )
+        peaky_blinder = await him.what_my_hero_does_when_nobody_is_looking()
+
+        assert not peaky_blinder.what_i_do == "I just drink wisky"
+        assert peaky_blinder.what_i_do == "Just relax!"
+        assert him.does() == "Shot someone"
+        assert not him.does() == "just relax!"
+
+        # ----------------------- Robin ----------------------
         robs = MyHeroes()
         robs.my_hero = Robin(
             my_hobby=HobbyHero(
@@ -120,8 +148,61 @@ class TestMyHeroes(MockerBuilder):
         assert not self.get_my_hero_hobby.mock.called
         assert not robin.what_i_do == "I just watch TV"
         assert robin.what_i_do == "I catch bad guys"
+
+        # calling does() method calls mocked Robin.get_my_hero_hobby method so get the mocked value
         assert not robs.does() == "I catch bad guys"
         assert robs.does() == "I just watch TV"
+        assert self.get_my_hero_hobby.mock.called
+        assert self.get_my_hero_hobby.mock.call_count == 2
+
+        # ================================================================================
+        # -------------------- Robin -> Batman --------------------
+        self.robin_becomes_batman = self.patch(
+            Robin,
+            new=Batman
+        )
+        self.get_my_hero_hobby.stop()
+
+        # Here now we will actually mock Batman.get_my_hero_hobby calling
+        self.get_my_hero_hobby = self.patch(
+            Robin,
+            'get_my_hero_hobby',
+            return_value=HobbyHero("I just watch TV")
+        )
+        robs = MyHeroes()
+        robs.my_hero = Robin(
+            my_hobby=HobbyHero(
+                what_i_do="I catch bad guys"
+            )
+        )
+        robin = await robs.what_my_hero_does_when_nobody_is_looking()
+
+        assert not self.get_my_hero_hobby.mock.called
+        assert not robin.what_i_do == "I just watch TV"
+        assert robin.what_i_do == "I catch bad guys"
+
+        # calling does() method calls mocked Batman.get_my_hero_hobby method so get the mocked value
+        assert robs.does() == "I catch bad guys"
+        assert not robs.does() == "I just watch TV"
+        assert not self.get_my_hero_hobby.mock.called
+        assert self.get_my_hero_hobby.mock.call_count == 0
+
+        # ----------------------------------------------------------------
+        # remember we mocked robin as batman => self.robin_becomes_batman
+        # ----------------------------------------------------------------
+        bats = MyHeroes()
+        bats.my_hero = Batman(
+            my_hobby=HobbyHero(
+                what_i_do="I catch bad guys"
+            )
+        )
+        batman = await robs.what_my_hero_does_when_nobody_is_looking()
+
+        assert not self.get_my_hero_hobby.mock.called
+        assert not batman.what_i_do == "I just watch TV"
+        assert batman.what_i_do == "I catch bad guys"
+        assert bats.does() == "I just watch TV"
+        assert not bats.does() == "I catch bad guys"
         assert self.get_my_hero_hobby.mock.called
         assert self.get_my_hero_hobby.mock.call_count == 2
 
