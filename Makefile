@@ -1,5 +1,7 @@
 
-build:
+DOCS_DIR := $(shell pwd)/docs
+
+build: clean
 	python setup.py sdist bdist_wheel
 	twine check dist/*
 
@@ -19,4 +21,8 @@ clean:
 run-demo:
 	python -m pytest main.py -vv -s -x
 
-.PHONY: build test-upload upload test-install clean run-demo
+html-doc:
+	cd $(DOCS_DIR); \
+	make html
+
+.PHONY: build test-upload upload test-install clean run-demo html-doc
