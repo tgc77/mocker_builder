@@ -61,7 +61,7 @@ class MockerBuilderWarning:
 
 
 class MockerBuilderException(Exception):
-    """Exception in MockerBuilder usage or invocation"""
+    """Raised Exception in MockerBuilder usage or invocation"""
 
 
 @dataclass
@@ -70,20 +70,21 @@ class TMockMetadata:
     return value and so on.
 
     Args:
-        target_path (str): Keep converted mock patch target and attribute users enter as class 
-        method or attribute or even module methods or attributes so we can just patch them.
+        target_path (str): Keep converted mock patch target and attribute users enter as class
+            method or attribute or even module methods or attributes so we can just patch them.
 
         is_async: (bool): Identify if method to be mocked is async or not.
 
         patch_kwargs: (MockMetadataKwargsType): Here we just dispatch kwargs mock parameters such as
-        return_value, side_effect, spec, new_callable, mock_configure and so on.
+            ``return_value``, `side_effect`, `spec`, `new_callable`, `mock_configure` and so on.
 
-        _patch: (_Patch): Mocker _patch wrapper to the mock.patch features.
+        _patch: (_Patch): Mocker `_patch` wrapper to the ``mock.patch`` features.
 
         _mock: (_TMockType): Mock instance keeper.
 
-        is_active: (bool): Flag to sinalize that mock is active. When set to False mock will be 
-        cleaned up after tested function finished.
+        is_active: (bool): Flag to sinalize that mock is active. When set to False mock will be
+            cleaned up after tested function finished.
+
     """
     target_path: str = None
     is_async: bool = False
@@ -132,7 +133,15 @@ class TMockMetadata:
 try:
     import asyncio
 
-    def _asyncio_future(result) -> asyncio.Future:
+    def _asyncio_future(result: Any) -> asyncio.Future:
+        """Function called when patching async `return_value`.
+
+        Args:
+            result (Any): Data defined when setting ``patch(return_value)``
+
+        Returns:
+            asyncio.Future: Asyncio future Task.
+        """
         future = asyncio.Future()
         future.set_result(result)
         return future
@@ -156,7 +165,8 @@ class Patcher:
         mock_metadata: TMockMetadata
     ) -> TMocker.PatchType:
         """Our mock patch to properly identify and setting mock properties. We start the mock so
-        we can manage state when stopping and restarting mocks.
+        we can manage state when stopping or restarting mocks and setting results::
+            (changing ``return_value`` or ``side_effect`` patch properties).
 
         Args:
             mock_metadata (TMockMetadata): Mock metadata instance with mock's data.
@@ -195,7 +205,7 @@ class Patcher:
             **mock_metadata.patch_kwargs
         )
         _mocked = _patch.start()
-        if (not mock_metadata.new) or (not mock_metadata.new_callable):
+        if (not mock_metadata.new) and (not mock_metadata.new_callable):
             _mocked.mock_add_spec(spec=Type[_TMockType])
         mock_metadata.is_active = True
         Patcher._mocker._patches.append(_patch)
@@ -213,6 +223,7 @@ class Patcher:
 
     @staticmethod
     def _clean_up():
+        """Our way to clean up patched data from mocker fixture."""
         print("\n######################## cleaning up ########################")
         for mock_metadata in Patcher._mocked_metadata:
             if not mock_metadata.is_active:
@@ -231,8 +242,8 @@ class TMockMetadataBuilder:
     Args:
         _mock_metadata (TMockMetadata): Mock metadata instance to propagate mock state.
 
-        _mock_keys_validate (List[str]): Mock parameters we need to check if were setted to 
-        dispatch to mock.patch creation.
+        _mock_keys_validate (List[str]): Mock parameters we need to check if were setted to
+            dispatch to ``mock.patch`` creation.
 
         _bypass_methods (List[str]): Methods we need keeping properly behavior for return value.
 
@@ -421,7 +432,7 @@ class TMockMetadataBuilder:
 
 
 class TMocker:
-    """Our interface to handle mock features"""
+    """Our API to handle patch and mock features"""
 
     @staticmethod
     def _patch(
@@ -436,7 +447,7 @@ class TMocker:
         Args:
             Generic (_TMockType): Mock type we give back to user's tests.
 
-            mock_metadata (TMockMetadata): Mock metadata instance given from MockMetadata Builder.
+            mock_metadata (TMockMetadata): Mock metadata instance given from `TMockMetadataBuilder`.
         """
         __mock_metadata: TMockMetadata = None
 
@@ -500,10 +511,12 @@ class MockerBuilder(ABC):
 
             Args:
                 test_main_class: The pytest main TestClass which runs all tests.
+
                 mocker: pytest-mock fixture to create patch and so on.
             """
             print("\n################# Mocker Builder Initializer ################")
             Patcher._mocker = mocker
+            setattr(test_main_class, 'mocker', mocker)
             yield fnc(test_main_class)
 
             # Cleaning up stopped mocks: mock_metadata.is_active = False to avoid raising
@@ -515,11 +528,13 @@ class MockerBuilder(ABC):
     def mocker_builder_setup(self):
         """You need to setup your tests initializing mocker builder features just like that:
 
+        Example:
             TestYourClassOfTests(MockerBuilder):
 
                 @MockerBuilder.initializer
                 def mocker_builder_setup(self):
-                    ...
+                    self = my_desired_mock = self.patch(...)
+
         """
         pass
 
@@ -539,80 +554,81 @@ class MockerBuilder(ABC):
         mock_configure: MockMetadataKwargsType = None,
         **kwargs
     ) -> TMocker.PatchType:
-        """From here we create new mock.patch parsing the :param target parameter. You can just set your
-        target as normal imported class, module or method. You don't need to pass it as string like
-        normal mock.patch does. Here we make it easier by just allowing to set the :param target parameter
-        for classes, modules and methods or functions without the need of setting the :param method 
-        parameter. Just if you wanna mock an attribute you must set it from the :param attribute
-        parameter as string. The target can be am imported class or module but the attribute need 
-        to be passed as string:
-            ...
-            >>> from testing_heroes.my_heroes import JusticeLeague
+        """From here we create new `mock.patch` parsing the ``target`` parameter. You can just set
+        your target as normal imported class, module or method. You don't need to pass it as string
+        like normal ``mock.patch`` does. Here we make it easier by just allowing to set the `target`
+        parameter for classes, modules and methods or functions without the need of setting the
+        ``method`` parameter. Just if you wanna mock an attribute you must set it from the
+        ``attribute`` parameter as string. The ``target`` can be am imported class or module
+        but the ``attribute`` need to be passed as string
 
-            >>> class TestMyHeroes(MockerBuilder):
+            Test Case::
+                ...
+                from testing_heroes.my_heroes import JusticeLeague
 
-            >>>     @MockerBuilder.initializer
-            >>>     def mocker_builder_setup(self):
-                        self.mock_justice_league__init__ = self.patch(
-                            target=JusticeLeague.__init__
-                        )
-            >>>
-            >>>     @pytest.mark.asyncio
-            >>>     async def test_heroes_sleeping(self):
-            >>>         justce_league = JusticeLeague()
+                class TestMyHeroes(MockerBuilder):
+
+                    @MockerBuilder.initializer
+                    def mocker_builder_setup(self):
+                            self.mock_justice_league__init__ = self.patch(
+                                target=JusticeLeague.__init__
+                            )
+
+                    @pytest.mark.asyncio
+                    async def test_heroes_sleeping(self):
+                        justce_league = JusticeLeague()
                         assert self.mock_justice_league__init__().called
-            >>>
-            >>>         async def hero_names():
+
+                        async def hero_names():
                             yield Batman().nickname
                             yield Robin().nickname
+
                         _hero_names = hero_names()
-            >>>
-            >>>         async for result in justce_league.are_heroes_sleeping():
+
+                        async for result in justce_league.are_heroes_sleeping():
                             assert result == "=== Heroes are awakened ==="
-            >>>
-            >>>         self.mock_justice_league__init__.stop()
-            >>>         justce_league = JusticeLeague()
-            >>>
-            >>>         async for result in justce_league.are_heroes_sleeping():
+
+                        self.mock_justice_league__init__.stop()
+
+                        justce_league = JusticeLeague()
+
+                        async for result in justce_league.are_heroes_sleeping():
                             _hero_name = await _hero_names.__anext__()
-                            print(result, _hero_name)
                             assert result == f"MagicMock=>({_hero_name}): ZZzzzz"
-        -----------------------------------------------------------------------------------------
-        Types description:
-            >>> TargetType = TypeVar('TargetType', Callable, ModuleType, str)
 
-            >>> AttrType = TypeVar('AttrType', bound=Union[Callable, str])
+        Types::
+            `TargetType`: TypeVar('TargetType', Callable, ModuleType, str)
 
-            >>> TypeNew = TypeVar('TypeNew', bound=Any)
+            `AttrType`: TypeVar('AttrType', bound=Union[Callable, str])
 
-            >>> NewCallableType = TypeVar('NewCallableType', bound=Optional[Callable])
+            `TypeNew`: TypeVar('TypeNew', bound=Any)
 
-            >>> ReturnValueType = TypeVar('ReturnValueType', bound=Optional[Any])
+            `NewCallableType`: TypeVar('NewCallableType', bound=Optional[Callable])
 
-            >>> SideEffectType = TypeVar('SideEffectType', bound=Optional[Union[Callable, List]])
+            `ReturnValueType`: TypeVar('ReturnValueType', bound=Optional[Any])
 
-        -----------------------------------------------------------------------------------------
-        Note: This doc is defined in unittest.patch doc. For a complete documentation please see:
+            `SideEffectType`: TypeVar('SideEffectType', bound=Optional[Union[Callable, List]])
+
+
+        Note:: This doc is defined in unittest.patch doc. For a complete documentation please see:
             https://docs.python.org/3/library/unittest.mock.html#the-patchers
 
-        -----------------------------------------------------------------------------------------
-        Args:
-            - target (TargetType): The target to be mocked.
 
-            - method (AttrType[str], optional): Method to be mocked, useful when need to create
+        Args:
+            target (TargetType): The target to be mocked.
+
+            method (AttrType[str], optional): Method to be mocked, useful when need to create
                 an method or dynamically invoking.
 
             attribute (AttrType[str], optional): Attribute to be mocked. Defaults to None.
 
-            new (TypeNew, optional): The new type that target.attibute
-                will get after mocking. Defaults to DEFAULT.
-                Ex: ... 
-                >>> self.add_mock(
+            new (TypeNew, optional): The new type that ``target.attibute`` will get after mocking.
+                Defaults to DEFAULT.
+                Example:
+                    self.patch(
                         target=MyClass,
                         attribute='my_class_attr',
-                        new=PropertyMock(OtherClass) # A Mock with spec of OtherClass.
-                            or
-                        new=OtherClass # A real class, not a mock.
+                        new=PropertyMock(OtherClass)
                     )
 
             spec (bool, optional):  This can be either a list of strings or an existing object (a
@@ -625,71 +641,70 @@ class MockerBuilder(ABC):
                 `mock.__class__` returns the class of the spec object. This allows mocks
                 to pass `isinstance` tests.
 
-            create (bool, optional): By default patch() will fail to replace 
-                attributes that don't exist. If you pass in create=True, and the attribute doesn't 
-                exist, patch will create the attribute for you when the patched function is called, 
-                and delete it again after the patched function has exited. This is useful 
-                for writing tests against attributes that your production code creates at runtime. 
-                It is off by default because it can be dangerous. With it switched on you can write 
+            create (bool, optional): By default patch() will fail to replace
+                attributes that don't exist. If you pass in create=True, and the attribute doesn't
+                exist, patch will create the attribute for you when the patched function is called,
+                and delete it again after the patched function has exited. This is useful
+                for writing tests against attributes that your production code creates at runtime.
+                It is off by default because it can be dangerous. With it switched on you can write
                 passing tests against APIs that don't actually exist!.
 
             spec_set (bool, optional): A stricter variant of `spec`. If used, attempting to *set*
                 or get an attribute on the mock that isn't on the object passed as
                 `spec_set` will raise an `AttributeError`.
 
-            autospec (Union[bool, Callable], optional): A more powerful form of spec is autospec. 
-            If you set autospec=True then the mock will be created with a spec from the object being 
-            replaced. All attributes of the mock will also have the spec of the corresponding 
-            attribute of the object being replaced. Methods and functions being mocked will have 
-            their arguments checked and will raise a TypeError if they are called with the wrong 
-            signature. For mocks replacing a class, their return value (the 'instance') will have 
-            the same spec as the class. See the create_autospec() function and Autospeccing.
+            autospec (Union[bool, Callable], optional): A more powerful form of spec is autospec.
+                If you set autospec=True then the mock will be created with a spec from the object
+                being replaced. All attributes of the mock will also have the spec of the corresponding
+                attribute of the object being replaced. Methods and functions being mocked will have
+                their arguments checked and will raise a TypeError if they are called with the wrong
+                signature. For mocks replacing a class, their return value (the 'instance') will have
+                the same spec as the class. See the create_autospec() function and Autospeccing.
 
-            Instead of autospec=True you can pass autospec=some_object to use an arbitrary object 
-            as the spec instead of the one being replaced.
+                Instead of autospec=True you can pass autospec=some_object to use an arbitrary object
+                as the spec instead of the one being replaced.
 
-            new_callable (NewCallableType, optional): allows you to specify a different class, 
-                or callable object, that will be called to create the new object. 
-                By default AsyncMock is used for async functions and MagicMock for the rest. 
+            new_callable (NewCallableType, optional): allows you to specify a different class,
+                or callable object, that will be called to create the new object.
+                By default AsyncMock is used for async functions and MagicMock for the rest.
 
-            return_value (ReturnValueType, optional): The value returned when the mock is called. 
+            return_value (ReturnValueType, optional): The value returned when the mock is called.
                 By default this is a new Mock (created on first access). See the
                 `return_value` attribute.
 
-            side_effect (SideEffectType, optional): A function to be called whenever 
-                the Mock is called. See
-                the `side_effect` attribute. Useful for raising exceptions or
-                dynamically changing return values. The function is called with the same
-                arguments as the mock, and unless it returns `DEFAULT`, the return
-                value of this function is used as the return value.
+            side_effect (SideEffectType, optional): A function to be called whenever
+                the Mock is called. See the `side_effect` attribute. Useful for raising exceptions or
+                dynamically changing return values. The function is called with the same arguments as 
+                the mock, and unless it returns `DEFAULT`, the return value of this function is 
+                used as the return value.
 
                 If `side_effect` is an iterable then each call to the mock will return
                 the next value from the iterable. If any of the members of the iterable
                 are exceptions they will be raised instead of returned.
 
-            mock_configure (MockMetadataKwargsType, optional): Set attributes on the mock through 
-                keyword arguments. It exists to make it easier to do configuration after the mock 
+            mock_configure (MockMetadataKwargsType, optional): Set attributes on the mock through
+                keyword arguments. It exists to make it easier to do configuration after the mock
                 has been created.
 
-                Attributes plus return values and side effects can be set on child mocks using 
-                standard dot notation:
+                Attributes plus return values and side effects can be set on child mocks using
+                standard dot notation::
 
-                ...
-                mock_who_is_my_hero = self.patch(
-                    target=Batman,
-                    mock_configure={
-                        'return_value.nickname': 'Bat Mock',
-                        'return_value.eating_banana.return_value': "doesn't like banana",
-                        'return_value.wearing_pyjama.return_value': "doesn't wear pyjama",
-                        'return_value.just_call_for.return_value': "Just calls for Mocker",
-                        'return_value.just_says.return_value': "I'm gonna mock you babe!",
-                    }
-                )
-                ...
+                    ...
+                    mock_who_is_my_hero = self.patch(
+                        target=Batman,
+                        mock_configure={
+                            'return_value.nickname': 'Bat Mock',
+                            'return_value.eating_banana.return_value': "doesn't like banana",
+                            'return_value.wearing_pyjama.return_value': "doesn't wear pyjama",
+                            'return_value.just_call_for.return_value': "Just calls for Mocker",
+                            'return_value.just_says.return_value': "I'm gonna mock you babe!",
+                        }
+                    )
+                    ...
 
         Returns:
-            TMocker.PatchType: AsyncMock if target is if the patched object is asynchronous or 
-                MagicMock if not.
+            TMocker.PatchType: Alias to _TPatch Generics which handle with MagicMock or AsyncMock
+                (not yet really but working on) according patching async methods or not.
         """
         return TMocker._patch(
             TMockMetadataBuilder()(
@@ -712,14 +727,16 @@ class MockerBuilder(ABC):
     def add_fixture(
         self,
         content: TFixtureContentType,
-        # scope: str = "function"
     ) -> TFixtureContentType:
-        # TODO We will work on this feature soon
-        # _fixture = pytest.fixture(scope=scope)(fixture_content)
-        # fixture_request = FixtureRequest(_fixture).getfixturevalue()
-        # def the_fixture(_fixture) -> content.__class__:
-        # result = yield content
-        # print("### Gonna clean up fixture_content...")
+        """Method to simulate a pytest fixture to be called in every test but in another way.
+
+        Args:
+            content (TFixtureContentType): Method to be called and returned or yielded
+
+        Returns:
+            TFixtureContentType: The return/yield data from content.
+
+        """
         if callable(content):
             result = content()
         else:
@@ -728,19 +745,3 @@ class MockerBuilder(ABC):
             return next(result)
         else:
             return result
-
-
-# def fixture_content(
-#     _content: TFixtureContentType
-# ) -> Generator[TFixtureContentType, None, None]:
-#     yield cast(_content.__class__, _content)
-#     print("### Gonna clean up fixture_content...")
-
-# def pytest_configure(config: Config):
-#     class Plugin:
-
-#         @pytest.fixture(autouse=True)
-#         def fix(self):
-#             assert type(self) is Plugin
-
-#     config.pluginmanager.register(Plugin())
