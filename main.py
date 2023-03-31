@@ -93,6 +93,28 @@ class TestMyHeroes(MockerBuilder):
         )
         # ========================================================
 
+    def test_io(self):
+        self.test_print_io = self.patch(
+            target='sys.stdout',
+            new_callable=StringIO
+        )
+        print_io_test()
+        assert self.test_print_io.mock.getvalue() == 'Ouieh!!!\n'
+
+    def test_another_print_io(self):
+        self.test_print_io = self.patch(
+            target='sys.stdout',
+            new_callable=StringIO
+        )
+        patched_print_io_test = self.patch(
+            target=print_io_test,
+            side_effect=[print("Ooouuiieeh!!")]
+        )
+        print_io_test()
+        assert not self.test_print_io.mock.getvalue() == 'Ouieh!!!\n'
+        assert self.test_print_io.mock.getvalue() == 'Ooouuiieeh!!\n'
+        patched_print_io_test.mock.assert_called()
+
     def test_robin_becomes_batman(self):
         self.robin_becomes_batman = self.patch(
             Robin,
@@ -205,14 +227,6 @@ class TestMyHeroes(MockerBuilder):
         assert not bats.does() == "I catch bad guys"
         assert self.get_my_hero_hobby.mock.called
         assert self.get_my_hero_hobby.mock.call_count == 2
-
-    def test_io(self):
-        self.mock_test_io = self.patch(
-            target='sys.stdout',
-            new_callable=StringIO
-        )
-        print_io_test()
-        assert self.mock_test_io().getvalue() == 'Ouieh!!!\n'
 
     @pytest.mark.asyncio
     async def test_heroes_sleeping(self):
