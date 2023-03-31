@@ -2,18 +2,18 @@
 Testing tools for mocking and patching based on pytest_mock mocker features but with improvements.
 
 ### Installation
-```
-pip install mocker-builder
+```bash
+$ pip install mocker-builder
 ```
 
 ### Initializer
-To start using mucker-builder features just create your Test class, inherit from MockerBuilder class,
-implement the required abstract method mocker_builder_setup decorating it with the @MockerBuilder.initializer
+To start using mucker-builder features just create your Test class, inherit from `MockerBuilder` class,
+implement the required abstract method mocker_builder_setup decorating it with the `@MockerBuilder.initializer`
 decorator and start building your mocks and fixtures, adding mocks from your test_... methods, 
-but you must declare the mocker_builder_setup method and decorate it with the 
-@MockerBuilder.initializer decorator to be able to use MockerBuilder features.
+but you must declare the `mocker_builder_setup` method and decorate it with the 
+`@MockerBuilder.initializer` decorator to be able to use `MockerBuilder` features.
 
-```Python
+```python
 ...
 def print_io_test():
     print("Ouieh!!!")
@@ -25,38 +25,73 @@ class TestMyHeroes(MockerBuilder):
         pass
 ...
 def test_io(self):
-    mock_test_io = self.patch(
+    print_test_io = self.patch(
         target='sys.stdout',
         new_callable=StringIO
     )
     print_io_test()
-    assert mock_test_io().getvalue() == 'Ouieh!!!\n'
+    assert print_test_io.mock.getvalue() == 'Ouieh!!!\n'
+```
+
+If you wanna use print_test_io all over your tests just patch it into `mocker_builder_setup`:
+```python
+...
+def print_io_test():
+    print("Ouieh!!!")
+    
+class TestMyHeroes(MockerBuilder):
+
+    @MockerBuilder.initializer
+    def mocker_builder_setup(self):
+        self.print_test_io = self.patch(
+            target='sys.stdout',
+            new_callable=StringIO
+        )
+...
+def test_print_io(self):
+    print_io_test()
+    assert self.print_test_io.mock.getvalue() == 'Ouieh!!!\n'
+
+def test_another_print_io(self):
+    patched_print_io_test = self.patch(
+        '__main__.print_io_test',
+        side_effect=[print("Ooouuiieeh!!")]
+    )
+    print_io_test()
+    assert not self.print_test_io.mock.getvalue() == 'Ouieh!!!\n'
+    assert self.print_test_io.mock.getvalue() == 'Ooouuiieeh!!!\n'
 ```
 
 ### The self.patch TMocker.PatchType properties
-The self.patch method creates a new patch/mock object. It is a patch/mock because by doing:
-```Python
-my_tested_thing = self.patch(...)
+The `self.patch` method creates a new patch/mock object. It is a patch/mock because by doing:
+```python
+my_patched_thing = self.patch(...)
 ```
-my_tested_thing has some properties of a mock.patch object, like start, stop and set_result. 
-To get access to the patched mock we can just:
+`my_patched_thing` has some properties of a mock.patch object, like start, stop and set_result. 
+To get access to the patched mock we can just access the `mock` patched attribute:
 ```Python
-assert my_tested_thing.mock.called
+assert my_patched_thing.mock.called
 Or
-assert my_tested_thing().called
+assert my_patched_thing().called
 ```
-Both ways return an MagicMock or an AsyncMock if the tested method is async.
+Both ways return an MagicMock or an AsyncMock (Not yet really but still working on this feature) 
+if the tested method is async.
+
+
+### Setting result after already been patched
 
 For a complete exemple flow just have a look bellow:
 
-```Python
+```python
+from io import StringIO
 from unittest.mock import PropertyMock
 import pytest
 
 from mocker_builder import MockerBuilder
-from testing_heroes import my_heroes
-from testing_heroes.my_heroes import (
+from my_heroes import them
+from my_heroes.them import (
     Batman,
+    HobbyHero,
     IHero,
     JusticeLeague,
     OtherHero,
@@ -64,6 +99,11 @@ from testing_heroes.my_heroes import (
     MyHeroes,
     Robin
 )
+
+
+def print_io_test():
+    print("Ouieh!!!")
+
 
 class Foo(IHero):
     nickname: str = "Bob"
@@ -95,8 +135,18 @@ class TestMyHeroes(MockerBuilder):
             )
         )
         # =================== Setting mocks ======================
+        self.what_i_do_when_nobody_is_looking = self.patch(
+            PeakyBlinder,
+            'what_i_do_when_nobody_is_looking',
+            return_value=HobbyHero("I just drink wisky")
+        )
+        self.get_my_hero_hobby = self.patch(
+            Robin,
+            'get_my_hero_hobby',
+            return_value=HobbyHero("I just watch TV")
+        )
         self.mock_my_heroes_module = self.patch(
-            target=my_heroes.initialize_other_hero
+            target=them.initialize_other_hero
         )
         self.mock_my_hero_attribue = self.patch(
             target=MyHeroes,
@@ -127,6 +177,111 @@ class TestMyHeroes(MockerBuilder):
             target=JusticeLeague.__init__
         )
         # ========================================================
+
+    @pytest.mark.asyncio
+    async def test_what_i_do_when_nobody_is_looking(self):
+        # ----------------------- PeakyBlinder ----------------------
+        him = MyHeroes()
+        him.my_hero = PeakyBlinder(
+            my_hobby=HobbyHero(
+                what_i_do="Shot someone"
+            )
+        )
+        peaky_blinder = await him.what_my_hero_does_when_nobody_is_looking()
+
+        assert self.what_i_do_when_nobody_is_looking.mock.called
+        assert not peaky_blinder.what_i_do == "Shot someone"
+        assert peaky_blinder.what_i_do == "I just drink wisky"
+        assert him.does() == "Shot someone"
+        assert not him.does() == "I just drink wisky"
+
+        self.what_i_do_when_nobody_is_looking.set_result(
+            return_value=HobbyHero("Just relax!")
+        )
+        peaky_blinder = await him.what_my_hero_does_when_nobody_is_looking()
+
+        assert not peaky_blinder.what_i_do == "I just drink wisky"
+        assert peaky_blinder.what_i_do == "Just relax!"
+        assert him.does() == "Shot someone"
+        assert not him.does() == "just relax!"
+
+        # ----------------------- Robin ----------------------
+        robs = MyHeroes()
+        robs.my_hero = Robin(
+            my_hobby=HobbyHero(
+                what_i_do="I catch bad guys"
+            )
+        )
+        robin = await robs.what_my_hero_does_when_nobody_is_looking()
+
+        assert not self.get_my_hero_hobby.mock.called
+        assert not robin.what_i_do == "I just watch TV"
+        assert robin.what_i_do == "I catch bad guys"
+
+        # calling does() method calls mocked Robin.get_my_hero_hobby method so get the mocked value
+        assert not robs.does() == "I catch bad guys"
+        assert robs.does() == "I just watch TV"
+        assert self.get_my_hero_hobby.mock.called
+        assert self.get_my_hero_hobby.mock.call_count == 2
+
+        # ================================================================================
+        # -------------------- Robin -> Batman --------------------
+        self.robin_becomes_batman = self.patch(
+            Robin,
+            new=Batman
+        )
+        self.get_my_hero_hobby.stop()
+
+        # Here now we will actually mock Batman.get_my_hero_hobby calling
+        self.get_my_hero_hobby = self.patch(
+            Robin,
+            'get_my_hero_hobby',
+            return_value=HobbyHero("I just watch TV")
+        )
+        robs = MyHeroes()
+        robs.my_hero = Robin(
+            my_hobby=HobbyHero(
+                what_i_do="I catch bad guys"
+            )
+        )
+        robin = await robs.what_my_hero_does_when_nobody_is_looking()
+
+        assert not self.get_my_hero_hobby.mock.called
+        assert not robin.what_i_do == "I just watch TV"
+        assert robin.what_i_do == "I catch bad guys"
+
+        # calling does() method calls mocked Batman.get_my_hero_hobby method so get the mocked value
+        assert robs.does() == "I catch bad guys"
+        assert not robs.does() == "I just watch TV"
+        assert not self.get_my_hero_hobby.mock.called
+        assert self.get_my_hero_hobby.mock.call_count == 0
+
+        # ----------------------------------------------------------------
+        # remember we mocked robin as batman => self.robin_becomes_batman
+        # ----------------------------------------------------------------
+        bats = MyHeroes()
+        bats.my_hero = Batman(
+            my_hobby=HobbyHero(
+                what_i_do="I catch bad guys"
+            )
+        )
+        batman = await robs.what_my_hero_does_when_nobody_is_looking()
+
+        assert not self.get_my_hero_hobby.mock.called
+        assert not batman.what_i_do == "I just watch TV"
+        assert batman.what_i_do == "I catch bad guys"
+        assert bats.does() == "I just watch TV"
+        assert not bats.does() == "I catch bad guys"
+        assert self.get_my_hero_hobby.mock.called
+        assert self.get_my_hero_hobby.mock.call_count == 2
+
+    def test_io(self):
+        self.mock_test_io = self.patch(
+            target='sys.stdout',
+            new_callable=StringIO
+        )
+        print_io_test()
+        assert self.mock_test_io().getvalue() == 'Ouieh!!!\n'
 
     @pytest.mark.asyncio
     async def test_heroes_sleeping(self):
@@ -175,7 +330,7 @@ class TestMyHeroes(MockerBuilder):
             justce_league = JusticeLeague()
             justce_league.join_hero(Batman())
             # my_heroes.Batman() still mocked
-            justce_league.join_hero(my_heroes.Batman())
+            justce_league.join_hero(them.Batman())
 
             assert await justce_league.call_everybody() == [
                 ('Batman', 'Come on', 'Big Fat Bat'),
@@ -186,16 +341,16 @@ class TestMyHeroes(MockerBuilder):
         mock_my_heroes_class = self.patch(
             target=MyHeroes
         )
-        my_heroes.who_is_the_best_hero()
+        them.who_is_the_best_hero()
         assert mock_my_heroes_class().called
 
     def test_mock_my_heroes_module(self):
         self.mock_my_heroes_module.stop()
-        my_heroes.who_is_the_best_hero()
+        them.who_is_the_best_hero()
         assert not self.mock_my_heroes_module().called
 
         self.mock_my_heroes_module.start()
-        my_heroes.who_is_the_best_hero()
+        them.who_is_the_best_hero()
         assert self.mock_my_heroes_module().called
 
     def test_mock_my_hero_attribute(self):
@@ -203,14 +358,14 @@ class TestMyHeroes(MockerBuilder):
         assert self.mock_my_hero_attribue.mock.just_says() == "Nothing to say!"
 
     def test_mock_my_class(self):
-        response = my_heroes.asks_what_other_hero_have_to_say_about_been_hero()
+        response = them.asks_what_other_hero_have_to_say_about_been_hero()
         assert response == "He feels good!"
 
     def test_my_hero_batman(self):
-        my_heroes.who_is_my_hero(Batman())
+        them.who_is_my_hero(Batman())
 
         testing = MyHeroes()
-        testing.my_hero = my_heroes.Batman()
+        testing.my_hero = them.Batman()
         testing.who_is_my_hero()
 
         assert self.my_hero_batman.mock.return_value.nickname == 'Bat Mock'
@@ -225,7 +380,7 @@ class TestMyHeroes(MockerBuilder):
 
         justce_league = JusticeLeague()
         # my_heroes.Batman() is mocked
-        justce_league.join_hero(my_heroes.Batman())
+        justce_league.join_hero(them.Batman())
         justce_league.join_hero(Robin())
 
         mock_test_io = self.patch(
@@ -259,21 +414,21 @@ I'm gonna have a pint!\n"""
 
     def test_mock_ugly_hero(self):
 
-        assert my_heroes.UGLY_HERO == 'Me'
+        assert them.UGLY_HERO == 'Me'
 
         mock_ugly_hero = self.patch(
-            target=my_heroes,
+            target=them,
             attribute='UGLY_HERO',
             mock_configure={
                 'third': 'You',
-                'who_is_the_most_ugly.return_value': 'Me'
+                'who_is_the_most_ugly.return_value': 'Me again'
             },
             first='Batman',
             second='Robin',
             call_me_a_hero=lambda: PeakyBlinder().nickname
         )
         mock_ugly_hero().configure_mock(
-            fourth='Me again',
+            fourth='Me',
             **{
                 'who_is_my_hero.return_value': Batman().nickname,
                 'who_is_the_most_beautiful.side_effect': ValueError("There isn't any beautiful hero")
@@ -283,9 +438,9 @@ I'm gonna have a pint!\n"""
         assert mock_ugly_hero().first == 'Batman'
         assert mock_ugly_hero().second == 'Robin'
         assert mock_ugly_hero().third == 'You'
-        assert mock_ugly_hero().fourth == 'Me again'
-        assert mock_ugly_hero().who_is_the_most_ugly() == 'Me'
-        assert mock_ugly_hero().call_me_a_hero() == "Tomas Shelby"
+        assert mock_ugly_hero().fourth == 'Me'
+        assert mock_ugly_hero().who_is_the_most_ugly() == 'Me again'
+        assert mock_ugly_hero().call_me_a_hero() == "Bart Burp"
         assert mock_ugly_hero().who_is_my_hero() == "Big Fat Bat"
 
         with pytest.raises(ValueError) as ex:
@@ -298,7 +453,7 @@ I'm gonna have a pint!\n"""
 
         justce_league = JusticeLeague()
         # my_heroes.Batman() is mocked but was stopped
-        justce_league.join_hero(my_heroes.Batman())
+        justce_league.join_hero(them.Batman())
         justce_league.join_hero(Robin())
         assert justce_league.how_can_we_call_for_heores() == [
             ("Batman", "just calls for Big Fat Bat"),
@@ -314,7 +469,7 @@ I'm gonna have a pint!\n"""
 
         justce_league = JusticeLeague()
         # my_heroes.Batman() is mocked and was started again
-        justce_league.join_hero(my_heroes.Batman())
+        justce_league.join_hero(them.Batman())
         justce_league.join_hero(Robin())
         assert justce_league.how_can_we_call_for_heores() == [
             ("MagicMock", "just calls for Mocker"),
@@ -334,9 +489,9 @@ I'm gonna have a pint!\n"""
             )
         )
 
-        my_heroes.who_is_my_hero(Robin())
+        them.who_is_my_hero(Robin())
         testing = MyHeroes()
-        testing.my_hero = my_heroes.Robin()
+        testing.my_hero = them.Robin()
         testing.who_is_my_hero()
 
         assert my_hero_robin.mock.called
@@ -355,10 +510,10 @@ I'm gonna have a pint!\n"""
         print("--------------------------------------------------------------------------")
         print("Who is my hero:")
         print("--------------------------------------------------------------------------")
-        my_heroes.who_is_my_hero(Robin())
+        them.who_is_my_hero(Robin())
 
         testing = MyHeroes()
-        testing.my_hero = my_heroes.Robin()
+        testing.my_hero = them.Robin()
         print("--------------------------------------------------------------------------")
         print("Who is my mocked hero with return_value = Foo():")
         print("--------------------------------------------------------------------------")
@@ -377,7 +532,7 @@ I'm gonna have a pint!\n"""
         assert isinstance(my_hero_robin.mock.return_value, PeakyBlinder)
 
         testing = MyHeroes()
-        testing.my_hero = my_heroes.Robin()
+        testing.my_hero = them.Robin()
         print("--------------------------------------------------------------------------")
         print("Who is my mocked hero with return_value = PeakyBlinder():")
         print("--------------------------------------------------------------------------")
@@ -392,10 +547,10 @@ I'm gonna have a pint!\n"""
         print("--------------------------------------------------------------------------")
         print("Who is my hero:")
         print("--------------------------------------------------------------------------")
-        my_heroes.who_is_my_hero(PeakyBlinder())
+        them.who_is_my_hero(PeakyBlinder())
 
         testing = MyHeroes()
-        testing.my_hero = my_heroes.PeakyBlinder()
+        testing.my_hero = them.PeakyBlinder()
         print("--------------------------------------------------------------------------")
         print("Who is my mocked hero with side_effect = Foo():")
         print("--------------------------------------------------------------------------")
@@ -406,14 +561,14 @@ I'm gonna have a pint!\n"""
 
         print("--------------------------------------------------------------------------")
         print("""Setting mock result side_effect=[
-    OtherHero(), 
+    OtherHero(),
     TypeError('Ops! No hero like that!')
 ]""")
         print("--------------------------------------------------------------------------")
         my_hero_robin.set_result(
             side_effect=[OtherHero(), TypeError("Ops! No hero like that!")]
         )
-        testing.my_hero = my_heroes.PeakyBlinder()
+        testing.my_hero = them.PeakyBlinder()
 
         assert not isinstance(testing.my_hero, Foo)
         assert isinstance(testing.my_hero, OtherHero)
@@ -427,9 +582,8 @@ I'm gonna have a pint!\n"""
         print("Testing side_effect = TypeError('Ops! No hero like that!')")
         print("--------------------------------------------------------------------------")
         with pytest.raises(TypeError) as ex:
-            testing.my_hero = my_heroes.PeakyBlinder()
+            testing.my_hero = them.PeakyBlinder()
             testing.who_is_my_hero()
         assert "Ops! No hero like that!" == str(ex.value)
-
 
 ```
