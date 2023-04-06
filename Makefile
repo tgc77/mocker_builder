@@ -25,4 +25,8 @@ html-doc:
 	cd $(DOCS_DIR); \
 	make html
 
-.PHONY: build test-upload upload test-install clean run-demo html-doc
+clean-html-doc:
+	cd $(DOCS_DIR); \
+	make clean
+
+.PHONY: build test-upload upload test-install clean run-demo html-doc clean-html-doc
