@@ -48,7 +48,7 @@ MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 _Patch = TypeVar('_Patch', bound=_PatchType)
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 
 class MockerBuilderWarning:
@@ -291,10 +291,11 @@ class TMockMetadataBuilder:
         for attr in self._mock_keys_validate:
             value = mock_metadata_kwargs.get(attr)
             if value:
-                if isinstance(value, dict):
-                    for key, data in value.items():
-                        kwargs.update({key: data})
-                    continue
+                if attr in ['mock_configure', 'mock_kwargs']:
+                    if isinstance(value, dict):
+                        for key, data in value.items():
+                            kwargs.update({key: data})
+                        continue
                 kwargs.update({attr: value})
         self._mock_metadata.patch_kwargs = kwargs
 
