@@ -177,6 +177,13 @@ class MyHeroes:  # HeroesRepository
     def my_hero(self, hero):
         self._my_hero = hero
 
+    def run_created_runtime_method(self):
+        try:
+            response = self.runtime_method()
+            print(response)
+        except Exception as ex:
+            print(f"Oops! {repr(ex)}")
+
     def does(self) -> str:
         hero_hobby = self._my_hero.get_my_hero_hobby()
         return hero_hobby.what_i_do

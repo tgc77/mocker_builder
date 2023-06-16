@@ -42,13 +42,12 @@ class TestMyHeroes(MockerBuilder):
     @MockerBuilder.initializer
     def mocker_builder_setup(self):
         # ================== Setting fixtures ===================
-        # TODO We will work on this feature to implement a real fixture
         self.my_hero = self.add_fixture(
-            content=PeakyBlinder(
+            content=lambda: (yield PeakyBlinder(
                 bananas=12,
                 pyjamas=7,
                 nickname="Thomas Shelby"
-            )
+            ))
         )
         # =================== Setting mocks ======================
         self.what_i_do_when_nobody_is_looking = self.patch(
@@ -98,8 +97,10 @@ class TestMyHeroes(MockerBuilder):
         self.test_print_io = self.patch(
             target='sys.stdout',
             new_callable=StringIO
+            # spec=StringIO
         )
         print_io_test()
+        # assert self.test_print_io.mock.called
         assert self.test_print_io.mock.getvalue() == 'Ouieh!!!\n'
 
     def test_another_print_io(self):
@@ -367,13 +368,13 @@ I'm gonna have a pint!\n"""
             attribute='UGLY_HERO',
             mock_configure={
                 'third': 'You',
-                'who_is_the_most_ugly.return_value': 'Me again'
+                'who_is_the_most_ugly.return_value': 'Me again',
             },
             first='Batman',
             second='Robin',
             call_me_a_hero=lambda: PeakyBlinder().nickname
         )
-        mock_ugly_hero().configure_mock(
+        mock_ugly_hero.configure_mock(
             fourth='Me',
             **{
                 'who_is_my_hero.return_value': Batman().nickname,
@@ -531,3 +532,20 @@ I'm gonna have a pint!\n"""
             testing.my_hero = my_heroes.PeakyBlinder()
             testing.who_is_my_hero()
         assert "Ops! No hero like that!" == str(ex.value)
+
+    def test_create_my_heroes_method_runtime(self):
+        runtime_method = self.patch(
+            target=MyHeroes,
+            method='runtime_method',
+            create=True,
+            # return_value="Ouieh! I'm runtime method running...", # Also works
+            # mock_configure={
+            #     'return_value': "Ouieh! I'm runtime created method running..." # Also works
+            # },
+        )
+        runtime_method.configure_mock(
+            return_value="Ouieh! I'm runtime created method running..."
+        )
+        _my_heroes = MyHeroes()
+        _my_heroes.run_created_runtime_method()
+        assert runtime_method.mock.called

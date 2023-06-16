@@ -21,7 +21,6 @@ from typing import (
     NewType,
     Optional,
     Tuple,
-    Type,
     TypeVar,
     Union,
 )
@@ -47,8 +46,10 @@ SideEffectType = TypeVar('SideEffectType', bound=Optional[Union[Callable, List]]
 MockMetadataKwargsType = TypeVar('MockMetadataKwargsType', bound=Dict[str, Any])
 FixtureType = TypeVar('FixtureType', bound=Callable[..., object])
 _Patch = TypeVar('_Patch', bound=_PatchType)
+TypeSpec = TypeVar('TypeSpec', bound=Optional[Callable[..., object]])
+TypeAutoSpec = TypeVar('TypeAutoSpec', bound=Optional[Union[bool, object]])
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 
 class MockerBuilderWarning:
@@ -138,6 +139,14 @@ class TMockMetadata:
     def new_callable(self) -> NewCallableType:
         return self.patch_kwargs.get('new_callable')
 
+    @property
+    def spec(self) -> TypeSpec:
+        return self.patch_kwargs.get('spec')
+
+    @property
+    def autospec(self) -> TypeAutoSpec:
+        return self.patch_kwargs.get('autospec')
+
 
 try:
     import asyncio
@@ -217,8 +226,14 @@ class Patcher:
             **mock_metadata.patch_kwargs
         )
         _mocked = _patch.start()
-        if (not mock_metadata.new) and (not mock_metadata.new_callable):
-            _mocked.mock_add_spec(spec=Type[_TMockType])
+        if all([
+            mock_metadata.new == DEFAULT,
+            not mock_metadata.new_callable,
+            not mock_metadata.spec,
+            not mock_metadata.autospec
+        ]):
+            _mocked.mock_add_spec(spec=_mocked)
+
         mock_metadata.is_active = True
         Patcher._mocker._patches.append(_patch)
         mock_metadata._patch = _patch
@@ -232,6 +247,21 @@ class Patcher:
             mock_metadata
         )
         return _tmock_patch
+
+    @staticmethod
+    def mock_configure(mock_metadata: TMockMetadata) -> TMocker.PatchType:
+        mock_metadata._patch.stop()
+        mock_metadata.is_active = False
+        mock_configure = mock_metadata.patch_kwargs.pop('mock_configure')
+        mock_metadata.patch_kwargs.update(mock_configure)
+        try:
+            Patcher._mocker._patches.remove(mock_metadata._patch)
+        except ValueError:
+            print("Opss!", mock_metadata._patch, "Not found!")
+
+        return Patcher.dispatch(
+            mock_metadata
+        )
 
     @staticmethod
     def _clean_up():
@@ -291,7 +321,10 @@ class TMockMetadataBuilder:
         for attr in self._mock_keys_validate:
             value = mock_metadata_kwargs.get(attr)
             if value:
-                if attr in ['mock_configure', 'mock_kwargs']:
+                if attr in [
+                    'mock_configure',
+                    'mock_kwargs'
+                ]:
                     if isinstance(value, dict):
                         for key, data in value.items():
                             kwargs.update({key: data})
@@ -513,6 +546,17 @@ class TMocker:
             self.__mock_metadata._patch.stop()
             self.__mock_metadata.is_active = False
             print(f"Mock {self.__get_mock()} stopped")
+
+        def configure_mock(self, **mock_configure: Dict):
+            if self.__mock_metadata.mock_configure:
+                self.__mock_metadata.mock_configure.update(mock_configure)
+            else:
+                self.__mock_metadata.mock_configure = mock_configure
+
+            _tpath = Patcher.mock_configure(
+                self.__mock_metadata
+            )
+            self.__mock_metadata = _tpath.__mock_metadata
 
     PatchType = _TPatch[_TMockType]
 
