@@ -49,7 +49,7 @@ _Patch = TypeVar('_Patch', bound=_PatchType)
 TypeSpec = TypeVar('TypeSpec', bound=Optional[Callable[..., object]])
 TypeAutoSpec = TypeVar('TypeAutoSpec', bound=Optional[Union[bool, object]])
 
-__version__ = "0.1.6"
+__version__ = "0.2.0"
 
 
 class MockerBuilderWarning:
