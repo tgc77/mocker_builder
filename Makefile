@@ -19,7 +19,7 @@ clean:
 	rm -rf ./build ./dist
 
 run-demo:
-	python -m pytest main.py -vv -s -x
+	python -m pytest test_cases/main.py -vv -s -x
 
 html-doc:
 	cd $(DOCS_DIR); \
