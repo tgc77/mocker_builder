@@ -10,7 +10,7 @@
 
 ### Fix
 
-- ?????
+- Improved configure_mock after already mock patched.
 
 ### Tests
 
