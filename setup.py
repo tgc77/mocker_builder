@@ -36,7 +36,8 @@ setup(
     install_requires=[
         'pytest==7.1.3',
         'pytest-mock==3.8.2',
-        'mock==4.0.3'
+        'mock==4.0.3',
+        'recommonmark'
     ],
     setup_requires=['pytest-runner'],
     tests_require=[
