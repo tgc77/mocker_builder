@@ -363,7 +363,7 @@ class TMockMetadataBuilder:
         if return_value and side_effect:
             MockerBuilderWarning.warn(
                 " Detected both return_value and side_effect keyword arguments passed to "
-                f"mocker {target} "
+                f"mocker {target}. "
                 "Be aware that side_effect cancels return_value, unless you define the return "
                 "of side_effect as DEFAULT, so have fun!"
             )
@@ -528,8 +528,6 @@ class TMocker:
             return_value: ReturnValueType = None,
             side_effect: SideEffectType = None
         ):
-            # TODO Let's think how to allow conditional setting return_value and/or side_effect.
-            # Ex: return_value = foo if foo else buu
             self.__mock_metadata.return_value = return_value
             self.__mock_metadata.side_effect = side_effect
             _tpath = Patcher.dispatch(
